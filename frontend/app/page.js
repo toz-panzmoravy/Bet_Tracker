@@ -140,6 +140,52 @@ function ChartCard({ title, subtitle, children }) {
 
 /* ─── Empty State ──────────────────────────────────────── */
 
+/* ─── Monthly Stats Table ──────────────────────────────── */
+
+function MonthlyStatsTable({ data }) {
+  if (!data?.length) return <EmptyState />;
+  return (
+    <div className="glass-card" style={{ padding: "1.25rem", overflow: "auto" }}>
+      <h3 style={{ fontSize: "0.9rem", fontWeight: 600, marginBottom: 16 }}>📅 Měsíční přehled</h3>
+      <table className="data-table" style={{ borderCollapse: "separate", borderSpacing: "0 4px" }}>
+        <thead>
+          <tr>
+            <th style={{ background: "#1e40af", color: "#fff", padding: "10px" }}>Měsíc</th>
+            <th style={{ background: "#1e40af", color: "#fff", padding: "10px" }}>Počet tipů</th>
+            <th style={{ background: "#1e40af", color: "#fff", padding: "10px" }}>WIN</th>
+            <th style={{ background: "#1e40af", color: "#fff", padding: "10px" }}>LOSE</th>
+            <th style={{ background: "#1e40af", color: "#fff", padding: "10px" }}>STORNO</th>
+            <th style={{ background: "#1e40af", color: "#fff", padding: "10px" }}>Profit</th>
+            <th style={{ background: "#1e40af", color: "#fff", padding: "10px" }}>ROI</th>
+            <th style={{ background: "#1e40af", color: "#fff", padding: "10px" }}>Kurz</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.map((m, i) => {
+            const isProfit = m.profit_total >= 0;
+            const bg = isProfit ? "rgba(34, 197, 94, 0.4)" : "rgba(239, 68, 68, 0.4)";
+            const color = "#e4e6f0";
+            return (
+              <tr key={i} style={{ background: bg }}>
+                <td style={{ padding: "8px 12px", color, fontWeight: 500 }}>{m.label}</td>
+                <td style={{ padding: "8px 12px", color, textAlign: "center" }}>{m.bets_count}</td>
+                <td style={{ padding: "8px 12px", color, textAlign: "center" }}>{m.wins_count}</td>
+                <td style={{ padding: "8px 12px", color, textAlign: "center" }}>{m.losses_count}</td>
+                <td style={{ padding: "8px 12px", color, textAlign: "center" }}>{m.voids_count}</td>
+                <td style={{ padding: "8px 12px", color, fontWeight: 600 }}>
+                  {m.profit_total > 0 ? "+" : ""}{Number(m.profit_total).toLocaleString("cs-CZ")}
+                </td>
+                <td style={{ padding: "8px 12px", color, fontWeight: 600 }}>{m.roi_percent}%</td>
+                <td style={{ padding: "8px 12px", color }}>ø{m.avg_odds}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function EmptyState() {
   return (
     <div style={{ textAlign: "center", padding: "3rem 0", color: "var(--color-text-muted)" }}>
@@ -171,6 +217,132 @@ function KpiCard({ label, value, suffix = "", color = "accent", icon }) {
           </span>
         )}
       </div>
+    </div>
+  );
+}
+
+/* ─── Weekly Summary Cards ─────────────────────────────── */
+
+function WeeklySummary({ data }) {
+  const { current_week, last_week } = data || {};
+
+  const Card = ({ title, stats, type }) => (
+    <div className="glass-card" style={{
+      padding: "12px 16px",
+      flex: 1,
+      borderLeft: `3px solid ${type === 'current' ? 'var(--color-accent)' : '#8b8fa3'}`,
+      display: "flex",
+      flexDirection: "column",
+      gap: 4
+    }}>
+      <span style={{ fontSize: "0.7rem", color: "var(--color-text-muted)", fontWeight: 600, textTransform: "uppercase" }}>{title}</span>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
+        <span style={{ fontSize: "1.1rem", fontWeight: 700 }}>
+          {Number(stats?.profit_total || 0).toLocaleString("cs-CZ")} Kč
+        </span>
+        <span style={{ fontSize: "0.8rem", color: stats?.roi_percent >= 0 ? "#22c55e" : "#ef4444", fontWeight: 600 }}>
+          {stats?.roi_percent > 0 ? "+" : ""}{stats?.roi_percent}% ROI
+        </span>
+      </div>
+      <span style={{ fontSize: "0.7rem", color: "var(--color-text-secondary)" }}>
+        {stats?.bets_count || 0} tipů • ø {stats?.avg_odds || 0}
+      </span>
+    </div>
+  );
+
+  return (
+    <div style={{ display: "flex", gap: 12, marginBottom: "1.5rem" }}>
+      <Card title="Tento týden" stats={current_week} type="current" />
+      <Card title="Minulý týden" stats={last_week} type="last" />
+    </div>
+  );
+}
+
+/* ─── Filter Dropdown ──────────────────────────────────── */
+
+function FilterDropdown({ filters, setFilters, sports, bookmakers }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const activeCount = Object.keys(filters).length;
+
+  return (
+    <div style={{ position: "relative" }}>
+      <button
+        className={`btn ${activeCount > 0 ? "btn-primary" : "btn-ghost"}`}
+        onClick={() => setIsOpen(!isOpen)}
+        style={{ display: "flex", alignItems: "center", gap: 8 }}
+      >
+        <span>🔍 Filtry</span>
+        {activeCount > 0 && (
+          <span style={{
+            background: "#fff",
+            color: "var(--color-accent)",
+            borderRadius: "50%",
+            width: 18, height: 18,
+            fontSize: "0.7rem",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontWeight: 800
+          }}>
+            {activeCount}
+          </span>
+        )}
+      </button>
+
+      {isOpen && (
+        <>
+          <div
+            style={{ position: "fixed", inset: 0, zIndex: 40 }}
+            onClick={() => setIsOpen(false)}
+          />
+          <div className="glass-card" style={{
+            position: "absolute", top: "calc(100% + 8px)", right: 0,
+            width: 280, padding: 20, zIndex: 50,
+            boxShadow: "0 10px 40px rgba(0,0,0,0.5)",
+            display: "flex", flexDirection: "column", gap: 12
+          }}>
+            <h4 style={{ fontSize: "0.8rem", fontWeight: 700, marginBottom: 4 }}>Nastavení filtrů</h4>
+
+            <div className="form-group">
+              <label style={{ fontSize: "0.75rem", color: "#8b8fa3", display: "block", marginBottom: 4 }}>Sport</label>
+              <select className="input" style={{ width: "100%" }}
+                value={filters.sport_id || ""}
+                onChange={(e) => setFilters({ ...filters, sport_id: e.target.value || undefined })}>
+                <option value="">Všechny sporty</option>
+                {sports.map((s) => <option key={s.id} value={s.id}>{s.icon} {s.name}</option>)}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label style={{ fontSize: "0.75rem", color: "#8b8fa3", display: "block", marginBottom: 4 }}>Bookmaker</label>
+              <select className="input" style={{ width: "100%" }}
+                value={filters.bookmaker_id || ""}
+                onChange={(e) => setFilters({ ...filters, bookmaker_id: e.target.value || undefined })}>
+                <option value="">Všichni bookmakeři</option>
+                {bookmakers.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              <div>
+                <label style={{ fontSize: "0.75rem", color: "#8b8fa3", display: "block", marginBottom: 4 }}>Od</label>
+                <input type="date" className="input" style={{ width: "100%" }}
+                  value={filters.date_from || ""}
+                  onChange={(e) => setFilters({ ...filters, date_from: e.target.value || undefined })} />
+              </div>
+              <div>
+                <label style={{ fontSize: "0.75rem", color: "#8b8fa3", display: "block", marginBottom: 4 }}>Do</label>
+                <input type="date" className="input" style={{ width: "100%" }}
+                  value={filters.date_to || ""}
+                  onChange={(e) => setFilters({ ...filters, date_to: e.target.value || undefined })} />
+              </div>
+            </div>
+
+            <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
+              <button className="btn btn-ghost" style={{ flex: 1, fontSize: "0.8rem" }} onClick={() => { setFilters({}); setIsOpen(false); }}>Reset</button>
+              <button className="btn btn-primary" style={{ flex: 1, fontSize: "0.8rem" }} onClick={() => setIsOpen(false)}>Použít</button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -291,35 +463,22 @@ export default function Dashboard() {
             Přehled tvých sázkových výsledků
           </p>
         </div>
-        <button className="btn btn-primary" onClick={handleAiAnalyze}>
-          🤖 AI Analýza
-        </button>
+        <div style={{ display: "flex", gap: 12 }}>
+          <FilterDropdown
+            filters={filters}
+            setFilters={setFilters}
+            sports={sports}
+            bookmakers={bookmakers}
+          />
+          <button className="btn btn-primary" onClick={handleAiAnalyze}>
+            🤖 AI Analýza
+          </button>
+        </div>
       </div>
 
-      {/* Filters */}
-      <div className="glass-card" style={{ padding: "1rem 1.25rem", marginBottom: "1.5rem", display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-        <select className="input" style={{ width: 160 }}
-          value={filters.sport_id || ""}
-          onChange={(e) => setFilters({ ...filters, sport_id: e.target.value || undefined })}>
-          <option value="">Všechny sporty</option>
-          {sports.map((s) => <option key={s.id} value={s.id}>{s.icon} {s.name}</option>)}
-        </select>
-        <select className="input" style={{ width: 160 }}
-          value={filters.bookmaker_id || ""}
-          onChange={(e) => setFilters({ ...filters, bookmaker_id: e.target.value || undefined })}>
-          <option value="">Všichni bookmakeři</option>
-          {bookmakers.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-        </select>
-        <input type="date" className="input" style={{ width: 160 }}
-          placeholder="Od" value={filters.date_from || ""}
-          onChange={(e) => setFilters({ ...filters, date_from: e.target.value || undefined })} />
-        <input type="date" className="input" style={{ width: 160 }}
-          placeholder="Do" value={filters.date_to || ""}
-          onChange={(e) => setFilters({ ...filters, date_to: e.target.value || undefined })} />
-        {Object.keys(filters).length > 0 && (
-          <button className="btn btn-ghost" onClick={() => setFilters({})}>✕ Reset</button>
-        )}
-      </div>
+      {/* Weekly Summary */}
+      {!loading && stats?.weekly && <WeeklySummary data={stats.weekly} />}
+
 
       {loading ? (
         <DashboardSkeleton />
@@ -417,6 +576,10 @@ export default function Dashboard() {
                 >
                   <RoiBarChart data={stats?.by_sport} />
                 </ChartCard>
+
+                <div style={{ gridColumn: "span 2" }}>
+                  <MonthlyStatsTable data={stats?.by_month} />
+                </div>
               </>
             )}
 

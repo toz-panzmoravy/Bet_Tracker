@@ -37,14 +37,101 @@ function InlineStatusSelect({ ticket, onUpdate }) {
             value={ticket.status}
             onChange={handleChange}
             disabled={updating}
-            style={updating ? { opacity: 0.5 } : {}}
+            style={{
+                ...updating ? { opacity: 0.5 } : {},
+                cursor: "pointer",
+                padding: "4px 28px 4px 12px",
+                borderRadius: "20px",
+                border: "1px solid rgba(255,255,255,0.1)",
+                fontWeight: 600,
+                fontSize: "0.75rem"
+            }}
         >
             {STATUS_OPTIONS.map((s) => (
-                <option key={s} value={s}>
+                <option key={s} value={s} style={{ background: "#222", color: "#fff" }}>
                     {STATUS_MAP[s].icon} {STATUS_MAP[s].label}
                 </option>
             ))}
         </select>
+    );
+}
+
+/* ─── Edit Ticket Modal ────────────────────────────────── */
+
+function EditTicketModal({ ticket, onClose, onSave, sports, bookmakers }) {
+    const [form, setForm] = useState({ ...ticket });
+    const [loading, setLoading] = useState(false);
+
+    async function handleSubmit(e) {
+        e.preventDefault();
+        setLoading(true);
+        try {
+            await onSave(ticket.id, form);
+            onClose();
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 500 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 20 }}>
+                    <h2 style={{ fontSize: "1.1rem", fontWeight: 700 }}>✏️ Upravit tiket</h2>
+                    <button className="btn btn-ghost" onClick={onClose}>✕</button>
+                </div>
+
+                <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                        <div className="form-group">
+                            <label style={{ fontSize: "0.75rem", color: "#8b8fa3", display: "block", marginBottom: 4 }}>Domácí</label>
+                            <input className="input" style={{ width: "100%" }} value={form.home_team || ""} onChange={e => setForm({ ...form, home_team: e.target.value })} />
+                        </div>
+                        <div className="form-group">
+                            <label style={{ fontSize: "0.75rem", color: "#8b8fa3", display: "block", marginBottom: 4 }}>Hosté</label>
+                            <input className="input" style={{ width: "100%" }} value={form.away_team || ""} onChange={e => setForm({ ...form, away_team: e.target.value })} />
+                        </div>
+                    </div>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                        <div className="form-group">
+                            <label style={{ fontSize: "0.75rem", color: "#8b8fa3", display: "block", marginBottom: 4 }}>Typ sázky (např. 1X2)</label>
+                            <input className="input" style={{ width: "100%" }} value={form.market_label || form.market_type || ""} onChange={e => setForm({ ...form, market_label: e.target.value })} />
+                        </div>
+                        <div className="form-group">
+                            <label style={{ fontSize: "0.75rem", color: "#8b8fa3", display: "block", marginBottom: 4 }}>Sázka / Výběr</label>
+                            <input className="input" style={{ width: "100%" }} value={form.selection || ""} onChange={e => setForm({ ...form, selection: e.target.value })} />
+                        </div>
+                    </div>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
+                        <div className="form-group">
+                            <label style={{ fontSize: "0.75rem", color: "#8b8fa3", display: "block", marginBottom: 4 }}>Kurz</label>
+                            <input type="number" step="0.01" className="input" style={{ width: "100%" }} value={form.odds || ""} onChange={e => setForm({ ...form, odds: e.target.value })} />
+                        </div>
+                        <div className="form-group">
+                            <label style={{ fontSize: "0.75rem", color: "#8b8fa3", display: "block", marginBottom: 4 }}>Vklad</label>
+                            <input type="number" className="input" style={{ width: "100%" }} value={form.stake || ""} onChange={e => setForm({ ...form, stake: e.target.value })} />
+                        </div>
+                        <div className="form-group">
+                            <label style={{ fontSize: "0.75rem", color: "#8b8fa3", display: "block", marginBottom: 4 }}>Výhra</label>
+                            <input type="number" className="input" style={{ width: "100%" }} value={form.payout || ""} onChange={e => setForm({ ...form, payout: e.target.value })} />
+                        </div>
+                        <div className="form-group">
+                            <label style={{ fontSize: "0.75rem", color: "#8b8fa3", display: "block", marginBottom: 4 }}>Sport</label>
+                            <select className="input" style={{ width: "100%" }} value={form.sport_id || ""} onChange={e => setForm({ ...form, sport_id: e.target.value })}>
+                                {sports.map(s => <option key={s.id} value={s.id}>{s.icon} {s.name}</option>)}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div style={{ display: "flex", gap: 12, marginTop: 10 }}>
+                        <button type="button" className="btn btn-ghost" style={{ flex: 1 }} onClick={onClose} disabled={loading}>Zrušit</button>
+                        <button type="submit" className="btn btn-primary" style={{ flex: 1 }} disabled={loading}>{loading ? "Ukládám..." : "Uložit změny"}</button>
+                    </div>
+                </form>
+            </div>
+        </div>
     );
 }
 
@@ -57,6 +144,7 @@ export default function TiketyPage() {
     const [sortBy, setSortBy] = useState("created_at");
     const [sortDir, setSortDir] = useState("desc");
     const [showConfetti, setShowConfetti] = useState(false);
+    const [editingTicket, setEditingTicket] = useState(null);
     const toast = useToast();
 
     useEffect(() => {
@@ -77,6 +165,18 @@ export default function TiketyPage() {
             toast.error("Chyba načítání tiketů: " + e.message);
         } finally {
             setLoading(false);
+        }
+    }
+
+    async function handleUpdateTicket(id, data) {
+        try {
+            const updated = await updateTicket(id, data);
+            setTickets((prev) =>
+                prev.map((t) => (t.id === id ? { ...t, ...updated } : t))
+            );
+            toast.success("✅ Tiket byl aktualizován");
+        } catch (e) {
+            toast.error("Chyba při ukládání: " + e.message);
         }
     }
 
@@ -241,7 +341,12 @@ export default function TiketyPage() {
                                         <td style={{ whiteSpace: "nowrap" }}>
                                             {t.created_at ? new Date(t.created_at).toLocaleDateString("cs-CZ") : "–"}
                                         </td>
-                                        <td>{t.sport?.icon} {t.sport?.name || "–"}</td>
+                                        <td>
+                                            <div style={{ display: "flex", alignItems: "center", gap: 8, whiteSpace: "nowrap" }}>
+                                                <span style={{ fontSize: "1.1rem" }}>{t.sport?.icon}</span>
+                                                <span>{t.sport?.name || "–"}</span>
+                                            </div>
+                                        </td>
                                         <td style={{ fontWeight: 500 }}>
                                             {t.home_team} – {t.away_team}
                                             {t.is_live && <span style={{ marginLeft: 6, fontSize: "0.7rem", background: "var(--color-red-soft)", color: "var(--color-red)", padding: "2px 6px", borderRadius: 6 }}>LIVE</span>}
@@ -257,12 +362,19 @@ export default function TiketyPage() {
                                         <td>
                                             <InlineStatusSelect ticket={t} onUpdate={handleStatusUpdate} />
                                         </td>
-                                        <td>
-                                            <button
-                                                className="btn btn-danger"
-                                                style={{ padding: "4px 8px", fontSize: "0.75rem" }}
-                                                onClick={() => handleDelete(t.id)}
-                                            >🗑</button>
+                                        <td style={{ whiteSpace: "nowrap" }}>
+                                            <div style={{ display: "flex", gap: 6 }}>
+                                                <button
+                                                    className="btn btn-ghost"
+                                                    style={{ padding: "4px 8px", fontSize: "0.8rem", border: "1px solid rgba(255,255,255,0.1)" }}
+                                                    onClick={() => setEditingTicket(t)}
+                                                >✏️</button>
+                                                <button
+                                                    className="btn btn-danger"
+                                                    style={{ padding: "4px 8px", fontSize: "0.8rem" }}
+                                                    onClick={() => handleDelete(t.id)}
+                                                >🗑</button>
+                                            </div>
                                         </td>
                                     </tr>
                                 );
@@ -271,6 +383,16 @@ export default function TiketyPage() {
                     </table>
                 )}
             </div>
+
+            {editingTicket && (
+                <EditTicketModal
+                    ticket={editingTicket}
+                    sports={sports}
+                    bookmakers={bookmakers}
+                    onClose={() => setEditingTicket(null)}
+                    onSave={handleUpdateTicket}
+                />
+            )}
         </div>
     );
 }

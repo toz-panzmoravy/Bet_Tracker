@@ -132,9 +132,13 @@ class OverallStats(BaseModel):
 class GroupedStat(BaseModel):
     label: str
     bets_count: int = 0
+    wins_count: int = 0
+    losses_count: int = 0
+    voids_count: int = 0
     stake_total: Decimal = Decimal("0")
     profit_total: Decimal = Decimal("0")
     roi_percent: float = 0.0
+    avg_odds: float = 0.0
 
 
 class TimeseriesPoint(BaseModel):
@@ -144,11 +148,18 @@ class TimeseriesPoint(BaseModel):
     bets_count: int = 0
 
 
+class WeeklyStats(BaseModel):
+    current_week: OverallStats
+    last_week: OverallStats
+
+
 class StatsOverview(BaseModel):
     overall: OverallStats
+    weekly: WeeklyStats
     by_sport: List[GroupedStat] = []
     by_market_type: List[GroupedStat] = []
     by_odds_bucket: List[GroupedStat] = []
+    by_month: List[GroupedStat] = []
     live_vs_prematch: List[GroupedStat] = []
     by_weekday: List[GroupedStat] = []
 

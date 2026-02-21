@@ -108,13 +108,18 @@ def update_ticket(ticket_id: int, data: TicketUpdate, db: Session = Depends(get_
     for key, value in update_data.items():
         setattr(ticket, key, value)
 
-    # Přepočítat profit pokud se změnil status/payout
-    if ticket.status == TicketStatus.won and ticket.payout and ticket.stake:
+    # Přepočítat profit pro vypořádané tikety
+    if ticket.status in [TicketStatus.won, TicketStatus.half_win] and ticket.payout is not None and ticket.stake is not None:
         ticket.profit = ticket.payout - ticket.stake
     elif ticket.status == TicketStatus.lost:
         ticket.profit = -ticket.stake
+        ticket.payout = 0
+    elif ticket.status == TicketStatus.half_loss:
+        ticket.profit = -(ticket.stake / 2)
+        ticket.payout = ticket.stake / 2
     elif ticket.status == TicketStatus.void:
         ticket.profit = 0
+        ticket.payout = ticket.stake
 
     db.commit()
     db.refresh(ticket)
