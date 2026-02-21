@@ -42,8 +42,11 @@ async def _ollama_generate(model: str, prompt: str, images: Optional[list[str]] 
 def _extract_json_from_text(text: str) -> Optional[list]:
     """Pokusí se extrahovat JSON pole z textu LLM odpovědi - tolerantní parser."""
 
-    # 1) Přímý pokus najít JSON pole [...]
-    bracket_match = re.search(r'\[[\s\S]*\]', text)
+    # 1) Vyčistíme markdown bloky ```json ... ``` pokud tam jsou
+    clean_text = re.sub(r'```(?:json)?\s*([\s\S]*?)```', r'\1', text).strip()
+
+    # 2) Přímý pokus najít JSON pole [...]
+    bracket_match = re.search(r'\[[\s\S]*\]', clean_text)
     if bracket_match:
         try:
             parsed = json.loads(bracket_match.group())
@@ -52,8 +55,8 @@ def _extract_json_from_text(text: str) -> Optional[list]:
         except json.JSONDecodeError:
             pass
 
-    # 2) Pokus najít JSON objekt {...} (single ticket)
-    brace_match = re.search(r'\{[\s\S]*\}', text)
+    # 3) Pokus najít JSON objekt {...} (single ticket)
+    brace_match = re.search(r'\{[\s\S]*\}', clean_text)
     if brace_match:
         try:
             parsed = json.loads(brace_match.group())
@@ -62,8 +65,8 @@ def _extract_json_from_text(text: str) -> Optional[list]:
         except json.JSONDecodeError:
             pass
 
-    # 3) Pokus najít více JSON objektů oddělených čárkou/newlinem
-    objects = re.findall(r'\{[^{}]+\}', text)
+    # 4) Pokus najít více JSON objektů oddělených čárkou/newlinem
+    objects = re.findall(r'\{[^{}]+\}', clean_text)
     if objects:
         results = []
         for obj_str in objects:
@@ -76,7 +79,7 @@ def _extract_json_from_text(text: str) -> Optional[list]:
         if results:
             return results
 
-    # 4) Pokus o regex extrakci z nestrukturovaného textu
+    # 5) Pokus o regex extrakci z nestrukturovaného textu
     ticket = _extract_from_plain_text(text)
     if ticket:
         return [ticket]
@@ -228,7 +231,11 @@ PRAVIDLA:
             "confidence": 0.0,
         }
 
-    logger.info(f"OCR raw response: {raw_response[:500]}")
+    logger.info(f"OCR raw response length: {len(raw_response)}")
+    if len(raw_response) < 50:
+        logger.warning(f"OCR: Podezřele krátká odpověď: {raw_response}")
+    else:
+        logger.info(f"OCR raw response (start): {raw_response[:500]}")
 
     # Pokus o parsování - tolerantní
     tickets = []

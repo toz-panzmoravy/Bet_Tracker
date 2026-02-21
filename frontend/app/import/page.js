@@ -46,20 +46,52 @@ export default function ImportPage() {
         return () => document.removeEventListener("paste", handlePaste);
     }, [handlePaste]);
 
+    async function resizeImage(dataUrl, maxWidth = 1600, maxHeight = 1600) {
+        return new Promise((resolve) => {
+            const img = new Image();
+            img.onload = () => {
+                let width = img.width;
+                let height = img.height;
+
+                if (width > maxWidth || height > maxHeight) {
+                    if (width > height) {
+                        height = Math.round((height * maxWidth) / width);
+                        width = maxWidth;
+                    } else {
+                        width = Math.round((width * maxHeight) / height);
+                        height = maxHeight;
+                    }
+                }
+
+                const canvas = document.createElement("canvas");
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext("2d");
+                ctx.drawImage(img, 0, 0, width, height);
+                resolve(canvas.toDataURL("image/jpeg", 0.85));
+            };
+            img.src = dataUrl;
+        });
+    }
+
     function processImage(file) {
         const reader = new FileReader();
         reader.onload = async (e) => {
-            const dataUrl = e.target.result;
-            setImagePreview(dataUrl);
-            setImage(dataUrl);
+            let dataUrl = e.target.result;
+
+            setLoading(true);
+            setOcrError("");
             setParsedTickets([]);
             setRawText("");
             setSaved(false);
-            setOcrError("");
             setShowManual(false);
 
-            setLoading(true);
             try {
+                // Resize image before sending to backend
+                dataUrl = await resizeImage(dataUrl);
+                setImagePreview(dataUrl);
+                setImage(dataUrl);
+
                 const result = await ocrParseBase64(dataUrl);
                 setParsedTickets(result.tickets || []);
                 setRawText(result.raw_text || "");
