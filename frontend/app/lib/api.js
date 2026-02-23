@@ -1,4 +1,4 @@
-const API_BASE = "http://localhost:8000/api";
+const API_BASE = "http://127.0.0.1:8000/api";
 
 async function fetchApi(path, options = {}) {
   const { timeout = 30000, ...fetchOpts } = options;
@@ -58,6 +58,39 @@ export async function deleteTicket(id) {
   return fetchApi(`/tickets/${id}`, { method: "DELETE" });
 }
 
+// ─── Market Types ───────────────────────────────────
+export async function getMarketTypes() {
+  return fetchApi("/market-types");
+}
+
+export async function getMarketTypeStats() {
+  return fetchApi("/market-types/stats");
+}
+
+export async function getTopMarketTypes(limit = 5, sportId = null) {
+  const qs = new URLSearchParams({ limit });
+  if (sportId) qs.set("sport_id", sportId);
+  return fetchApi(`/market-types/top?${qs}`);
+}
+
+export async function createMarketType(data) {
+  return fetchApi("/market-types", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateMarketType(id, data) {
+  return fetchApi(`/market-types/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteMarketType(id) {
+  return fetchApi(`/market-types/${id}`, { method: "DELETE" });
+}
+
 // ─── Stats ────────────────────────────────────────────
 export async function getStatsOverview(params = {}) {
   const qs = new URLSearchParams();
@@ -76,12 +109,17 @@ export async function getTimeseries(params = {}) {
 }
 
 // ─── OCR ──────────────────────────────────────────────
-export async function ocrParseBase64(imageBase64) {
+export async function ocrParseBase64(imageBase64, bookmaker = "tipsport") {
   return fetchApi("/ocr/parse-base64", {
     method: "POST",
-    body: JSON.stringify({ image: imageBase64 }),
-    timeout: 300000, // 5 minut – vision model je pomalý
+    body: JSON.stringify({ image: imageBase64, bookmaker }),
+    timeout: 600000, // 10 minut – pro slabší HW / velké obrázky
   });
+}
+
+export async function checkOcrHealth(unload = false) {
+  const qs = unload ? "?unload=true" : "";
+  return fetchApi(`/ocr/health${qs}`, { timeout: 15000 });
 }
 
 // ─── AI ───────────────────────────────────────────────

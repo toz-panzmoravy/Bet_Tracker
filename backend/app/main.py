@@ -7,6 +7,7 @@ from app.routers.stats import router as stats_router
 from app.routers.ocr import router as ocr_router
 from app.routers.ai import router as ai_router
 from app.routers.meta import router as meta_router
+from app.routers.market_types import router as market_types_router
 
 settings = get_settings()
 
@@ -19,18 +20,18 @@ app = FastAPI(
 # CORS – povolí Next.js dev server
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "http://10.0.1.42:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Routery
 app.include_router(tickets_router)
 app.include_router(stats_router)
 app.include_router(ocr_router)
 app.include_router(ai_router)
 app.include_router(meta_router)
+app.include_router(market_types_router)
 
 
 @app.get("/")

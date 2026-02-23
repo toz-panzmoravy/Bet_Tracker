@@ -1,6 +1,6 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
-import { ocrParseBase64, createTicket, getSports, getLeagues, getBookmakers } from "../lib/api";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { ocrParseBase64, createTicket, getSports, getLeagues, getBookmakers, getMarketTypes, getTopMarketTypes, createMarketType, checkOcrHealth } from "../lib/api";
 
 const EMPTY_TICKET = {
     home_team: "", away_team: "", sport: "", league: "",
@@ -19,13 +19,28 @@ export default function ImportPage() {
     const [sports, setSports] = useState([]);
     const [leagues, setLeagues] = useState([]);
     const [bookmakers, setBookmakers] = useState([]);
+    const [marketTypes, setMarketTypes] = useState([]);
     const [showManual, setShowManual] = useState(false);
     const [ocrError, setOcrError] = useState("");
+    const [restartStatus, setRestartStatus] = useState("ok"); // ok, restarting, error
+
+    const [ocrBookmaker, setOcrBookmaker] = useState("tipsport");
+    const ocrBookmakerRef = useRef("tipsport");
+
+    const handleBookmakerChange = (val) => {
+        setOcrBookmaker(val);
+        ocrBookmakerRef.current = val;
+    };
+
+    const [topMarketTypes, setTopMarketTypes] = useState([]);
+    const [allMarketTypes, setAllMarketTypes] = useState([]);
 
     useEffect(() => {
         getSports().then(setSports).catch(() => { });
         getLeagues().then(setLeagues).catch(() => { });
         getBookmakers().then(setBookmakers).catch(() => { });
+        getMarketTypes().then(setAllMarketTypes).catch(() => { });
+        getTopMarketTypes(5).then(setTopMarketTypes).catch(() => { });
     }, []);
 
     // Ctrl+V paste handler
@@ -46,7 +61,7 @@ export default function ImportPage() {
         return () => document.removeEventListener("paste", handlePaste);
     }, [handlePaste]);
 
-    async function resizeImage(dataUrl, maxWidth = 1600, maxHeight = 1600) {
+    async function resizeImage(dataUrl, maxWidth = 1000, maxHeight = 1000) {
         return new Promise((resolve) => {
             const img = new Image();
             img.onload = () => {
@@ -92,11 +107,19 @@ export default function ImportPage() {
                 setImagePreview(dataUrl);
                 setImage(dataUrl);
 
-                const result = await ocrParseBase64(dataUrl);
+                const result = await ocrParseBase64(dataUrl, ocrBookmakerRef.current);
                 setParsedTickets(result.tickets || []);
                 setRawText(result.raw_text || "");
                 if (!result.tickets || result.tickets.length === 0) {
-                    setOcrError("OCR nedokázalo rozpoznat tikety. Můžeš je zadat ručně.");
+                    let msg = "";
+                    if (result.raw_text?.includes("Chyba při volání Ollama")) {
+                        msg = "❌ AI server neodpovídá správně: " + result.raw_text;
+                    } else if (result.raw_text && result.raw_text.length > 10) {
+                        msg = "⚠️ OCR rozpoznalo text, ale nenašlo žádné tikety. Zkontroluj 'Raw OCR výstup'.";
+                    } else {
+                        msg = "⚠️ OCR nedokázalo rozpoznat tikety. Zkus obrázek vložit znovu nebo klikni 'Restart OCR'.";
+                    }
+                    setOcrError(msg);
                     setShowManual(true);
                 }
             } catch (err) {
@@ -138,14 +161,32 @@ export default function ImportPage() {
                 const league = leagues.find(l => l.name.toLowerCase() === (t.league || "").toLowerCase());
                 const bookmaker = bookmakers[0];
 
+                // Vyhledat nebo vytvořit MarketType podle market_label
+                let marketTypeId = null;
+                if (t.market_label) {
+                    const existing = allMarketTypes.find(mt => mt.name.toLowerCase() === t.market_label.toLowerCase());
+                    if (existing) {
+                        marketTypeId = existing.id;
+                    } else {
+                        // Vytvořit nový pokud neexistuje
+                        const newMt = await createMarketType({
+                            name: t.market_label,
+                            sport_ids: sport ? [sport.id] : []
+                        });
+                        marketTypeId = newMt.id;
+                        // Aktualizovat lokální seznam
+                        setAllMarketTypes(prev => [...prev, newMt]);
+                    }
+                }
+
                 await createTicket({
                     bookmaker_id: bookmaker?.id || 1,
                     sport_id: sport?.id || 1,
                     league_id: league?.id || null,
+                    market_type_id: marketTypeId,
                     home_team: t.home_team || "Neznámý",
                     away_team: t.away_team || "Neznámý",
-                    market_type: t.market_label || null,
-                    market_label: t.market_label || null,
+                    market_label: t.market_label || null, // Zachováme textový label pro jistotu
                     selection: t.selection || null,
                     odds: parseFloat(t.odds) || 1.0,
                     stake: parseFloat(t.stake) || 0,
@@ -173,6 +214,25 @@ export default function ImportPage() {
         setShowManual(false);
     }
 
+    async function handleRestartOcr() {
+        setRestartStatus("restarting");
+        reset();
+        try {
+            // unload: true vyhodí model z VRAM a nahraje ho znovu čistý
+            const res = await checkOcrHealth(true);
+            if (res.status === "ok") {
+                setRestartStatus("ok");
+                setTimeout(() => setRestartStatus("ok_confirmed"), 2000);
+            } else {
+                setRestartStatus("error");
+                setOcrError(res.message);
+            }
+        } catch (err) {
+            setRestartStatus("error");
+            setOcrError("Restart selhal: " + err.message);
+        }
+    }
+
     return (
         <div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
@@ -187,6 +247,19 @@ export default function ImportPage() {
                 <button className="btn btn-primary" onClick={addManualTicket}>
                     ✏️ Přidat ručně
                 </button>
+            </div>
+
+            {/* Výběr zdroje OCR */}
+            <div style={{ marginBottom: 16, display: "flex", gap: 16, alignItems: "center", background: "var(--color-bg-card)", padding: "12px 16px", borderRadius: 12, border: "1px solid var(--color-border)" }}>
+                <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>Vyberte sázkovou kancelář před nahráním tiketu:</span>
+                <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.85rem", cursor: "pointer", opacity: ocrBookmaker === "tipsport" ? 1 : 0.6 }}>
+                    <input type="radio" name="ocrBookmaker" value="tipsport" checked={ocrBookmaker === "tipsport"} onChange={() => handleBookmakerChange("tipsport")} />
+                    ⚫ Tipsport (Tmavý)
+                </label>
+                <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.85rem", cursor: "pointer", opacity: ocrBookmaker === "betano" ? 1 : 0.6 }}>
+                    <input type="radio" name="ocrBookmaker" value="betano" checked={ocrBookmaker === "betano"} onChange={() => handleBookmakerChange("betano")} />
+                    ⚪ Betano (Světlý)
+                </label>
             </div>
 
             {/* Pokud ještě není obrázek a nejsou manuální tikety */}
@@ -218,12 +291,26 @@ export default function ImportPage() {
                         <div className="glass-card" style={{ padding: "1.25rem" }}>
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
                                 <h3 style={{ fontSize: "0.9rem", fontWeight: 600 }}>📷 Náhled</h3>
-                                <button className="btn btn-ghost" style={{ padding: "4px 12px", fontSize: "0.8rem" }} onClick={reset}>
-                                    Nový import
-                                </button>
+                                <div style={{ display: "flex", gap: 8 }}>
+                                    <button
+                                        className={`btn btn-ghost ${restartStatus === 'error' ? 'text-error' : ''}`}
+                                        style={{ padding: "4px 12px", fontSize: "0.8rem", color: restartStatus === 'restarting' ? 'var(--color-yellow)' : (restartStatus === 'ok_confirmed' ? 'var(--color-success)' : '') }}
+                                        onClick={handleRestartOcr}
+                                        disabled={restartStatus === 'restarting'}
+                                    >
+                                        {restartStatus === 'restarting' ? '⏳ Restartuji...' : (restartStatus === 'ok_confirmed' ? '✅ Systém OK' : '🔄 Restart OCR')}
+                                    </button>
+                                    <button className="btn btn-ghost" style={{ padding: "4px 12px", fontSize: "0.8rem" }} onClick={reset}>
+                                        Nový import
+                                    </button>
+                                </div>
                             </div>
                             <img src={imagePreview} alt="Screenshot tiketu"
                                 style={{ width: "100%", borderRadius: 12, border: "1px solid var(--color-border)" }} />
+
+                            <div style={{ marginTop: 8, textAlign: "center", color: "var(--color-text-muted)", fontSize: "0.8rem" }}>
+                                Využitý OCR profil: <strong style={{ color: "var(--color-text)" }}>{ocrBookmaker === "tipsport" ? "Tipsport" : "Betano"}</strong>
+                            </div>
 
                             {/* Raw OCR */}
                             {rawText && (
@@ -286,6 +373,8 @@ export default function ImportPage() {
                             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                                 {parsedTickets.map((t, i) => (
                                     <TicketForm key={i} ticket={t} index={i} sports={sports}
+                                        allMarketTypes={allMarketTypes}
+                                        topMarketTypes={topMarketTypes}
                                         onUpdate={updateTicket} onRemove={removeTicket} />
                                 ))}
                             </div>
@@ -297,7 +386,143 @@ export default function ImportPage() {
     );
 }
 
-function TicketForm({ ticket: t, index: i, sports, onUpdate, onRemove }) {
+function MarketTypeSelect({ value, allMarketTypes, onUpdate, sportId }) {
+    const [isOpen, setIsOpen] = useState(false);
+    const [search, setSearch] = useState(value || "");
+    const [sportTopTypes, setSportTopTypes] = useState([]);
+
+    useEffect(() => {
+        getTopMarketTypes(5, sportId).then(setSportTopTypes).catch(() => { });
+    }, [sportId]);
+
+    useEffect(() => setSearch(value || ""), [value]);
+
+    const filtered = allMarketTypes.filter(t => {
+        const matchesSearch = t.name.toLowerCase().includes(search.toLowerCase());
+        if (!sportId) return matchesSearch;
+
+        // Defensive check: if t.sports is missing, assume it belongs to all sports
+        const targetSportIds = t.sports ? t.sports.map(s => s.id) : [];
+        const isBelongingToSport = targetSportIds.length === 0 || targetSportIds.includes(sportId);
+
+        return matchesSearch && isBelongingToSport;
+    });
+
+    const displayList = search ? filtered : sportTopTypes;
+
+    return (
+        <div style={{ position: "relative" }}>
+            <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                <input
+                    className="input"
+                    style={{ padding: "6px 30px 6px 10px", fontSize: "0.8rem", width: "100%" }}
+                    placeholder="Hledat typ sázky..."
+                    value={search}
+                    onChange={(e) => {
+                        setSearch(e.target.value);
+                        onUpdate(e.target.value);
+                        setIsOpen(true);
+                    }}
+                    onFocus={() => setIsOpen(true)}
+                    onBlur={() => setTimeout(() => setIsOpen(false), 200)}
+                />
+                <span style={{ position: "absolute", right: 10, fontSize: "0.8rem", pointerEvents: "none", opacity: 0.5 }}>
+                    {isOpen ? "🔼" : "🔽"}
+                </span>
+            </div>
+
+            {isOpen && (
+                <div style={{
+                    position: "absolute", top: "100%", left: 0, right: 0,
+                    background: "var(--color-bg-card)",
+                    border: "1px solid var(--color-border)",
+                    borderRadius: 10, marginTop: 6, zIndex: 1000,
+                    maxHeight: 280, overflowY: "auto",
+                    boxShadow: "0 10px 30px -5px rgba(0, 0, 0, 0.6)",
+                    width: "max-content", minWidth: "100%",
+                    padding: "4px"
+                }}>
+                    {!search && sportTopTypes.length > 0 && (
+                        <div style={{ padding: "8px 12px", fontSize: "0.7rem", color: "var(--color-text-secondary)", background: "rgba(255,255,255,0.02)", borderRadius: "6px 6px 0 0", marginBottom: 2 }}>
+                            🔥 Časté pro tento sport
+                        </div>
+                    )}
+
+                    {displayList.map((mt, idx) => (
+                        <div
+                            key={mt.id || idx}
+                            className="dropdown-item"
+                            style={{
+                                padding: "10px 12px", cursor: "pointer",
+                                fontSize: "0.8rem",
+                                borderRadius: 6,
+                                marginBottom: 2,
+                                background: mt.name === value ? "var(--color-accent-soft)" : "transparent",
+                                transition: "all 0.2s"
+                            }}
+                            onMouseDown={() => {
+                                setSearch(mt.name);
+                                onUpdate(mt.name);
+                                setIsOpen(false);
+                            }}
+                        >
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                <span>{mt.name}</span>
+                                {mt.sports && mt.sports.length > 0 && (
+                                    <div style={{ display: "flex", gap: 2 }}>
+                                        {mt.sports.slice(0, 3).map(s => <span key={s.id} style={{ fontSize: "0.7rem" }}>{s.icon}</span>)}
+                                        {mt.sports.length > 3 && <span style={{ fontSize: "0.6rem", opacity: 0.5 }}>+{mt.sports.length - 3}</span>}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    ))}
+
+                    {search && !allMarketTypes.some(t => t.name.toLowerCase() === search.toLowerCase()) && (
+                        <div
+                            style={{
+                                padding: "12px", cursor: "pointer",
+                                color: "var(--color-blue)", fontWeight: 600,
+                                borderRadius: 8,
+                                background: "rgba(var(--color-blue-rgb), 0.1)",
+                                fontSize: "0.8rem",
+                                marginTop: 4,
+                                textAlign: "center",
+                                border: "1px dashed var(--color-blue)"
+                            }}
+                            onMouseDown={() => {
+                                onUpdate(search);
+                                setIsOpen(false);
+                            }}
+                        >
+                            ➕ Vytvořit nový: "{search}"
+                        </div>
+                    )}
+
+                    {displayList.length === 0 && search && (
+                        <div style={{ padding: "20px 12px", color: "var(--color-text-muted)", fontSize: "0.75rem", textAlign: "center" }}>
+                            🔍 Žádný odpovídající typ nenalezen
+                        </div>
+                    )}
+
+                    {displayList.length === 0 && !search && (
+                        <div style={{ padding: "20px 12px", color: "var(--color-text-muted)", fontSize: "0.75rem", textAlign: "center" }}>
+                            Zatím žádné typy sázek
+                        </div>
+                    )}
+                </div>
+            )}
+
+            <style jsx>{`
+                .dropdown-item:hover {
+                    background: rgba(255, 255, 255, 0.05) !important;
+                }
+            `}</style>
+        </div>
+    );
+}
+
+function TicketForm({ ticket: t, index: i, sports, allMarketTypes, topMarketTypes, onUpdate, onRemove }) {
     return (
         <div style={{
             background: "var(--color-bg-input)",
@@ -342,9 +567,12 @@ function TicketForm({ ticket: t, index: i, sports, onUpdate, onRemove }) {
                 </div>
                 <div>
                     <label style={{ color: "var(--color-text-muted)", fontSize: "0.7rem" }}>Typ sázky</label>
-                    <input className="input" style={{ padding: "6px 10px", fontSize: "0.8rem" }}
-                        placeholder="např. Více než 2.5"
-                        value={t.market_label || ""} onChange={(e) => onUpdate(i, "market_label", e.target.value)} />
+                    <MarketTypeSelect
+                        value={t.market_label}
+                        allMarketTypes={allMarketTypes}
+                        sportId={sports.find(s => s.name === t.sport)?.id}
+                        onUpdate={(val) => onUpdate(i, "market_label", val)}
+                    />
                 </div>
                 <div>
                     <label style={{ color: "var(--color-text-muted)", fontSize: "0.7rem" }}>Výběr</label>

@@ -73,6 +73,20 @@ def seed():
             db.commit()
             print("✅ Ligy vytvořeny")
 
+        # ─── Typy sázek (MarketTypes) ───
+        from app.models import MarketType
+        if db.query(MarketType).count() == 0:
+            market_types = [
+                MarketType(name="Výsledek zápasu", description="Tradiční 1X2 nebo vítěz do rozhodnutí"),
+                MarketType(name="Počet gólů v zápasu", description="Over / Under góly"),
+                MarketType(name="Oba týmy dají gól", description="BTTS (Yes/No)"),
+                MarketType(name="Dvojitý šance", description="1X, 12, X2"),
+                MarketType(name="Handicap", description="Asijský nebo evropský handicap"),
+            ]
+            db.add_all(market_types)
+            db.commit()
+            print("✅ Základní typy sázek vytvořeny")
+
         print("\n🎉 Seed dokončen!")
 
     finally:

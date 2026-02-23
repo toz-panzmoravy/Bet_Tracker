@@ -37,7 +37,7 @@ def list_tickets(
     league_id: Optional[int] = None,
     bookmaker_id: Optional[int] = None,
     status: Optional[str] = None,
-    market_type: Optional[str] = None,
+    market_type_id: Optional[int] = None,
     is_live: Optional[bool] = None,
     date_from: Optional[datetime] = None,
     date_to: Optional[datetime] = None,
@@ -54,6 +54,7 @@ def list_tickets(
         joinedload(Ticket.bookmaker),
         joinedload(Ticket.sport),
         joinedload(Ticket.league),
+        joinedload(Ticket.market_type_rel),
     )
 
     if sport_id:
@@ -64,8 +65,8 @@ def list_tickets(
         query = query.filter(Ticket.bookmaker_id == bookmaker_id)
     if status:
         query = query.filter(Ticket.status == status)
-    if market_type:
-        query = query.filter(Ticket.market_type == market_type)
+    if market_type_id:
+        query = query.filter(Ticket.market_type_id == market_type_id)
     if is_live is not None:
         query = query.filter(Ticket.is_live == is_live)
     if date_from:
@@ -91,6 +92,7 @@ def get_ticket(ticket_id: int, db: Session = Depends(get_db)):
         joinedload(Ticket.bookmaker),
         joinedload(Ticket.sport),
         joinedload(Ticket.league),
+        joinedload(Ticket.market_type_rel),
     ).filter(Ticket.id == ticket_id).first()
     if not ticket:
         raise HTTPException(status_code=404, detail="Tiket nenalezen")

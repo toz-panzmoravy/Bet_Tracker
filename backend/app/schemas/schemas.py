@@ -42,16 +42,44 @@ class LeagueOut(LeagueBase):
         from_attributes = True
 
 
+# ─── Market Type ──────────────────────────────────────────
+
+class MarketTypeBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+    is_active: bool = True
+
+class MarketTypeCreate(MarketTypeBase):
+    sport_ids: List[int] = []
+
+class MarketTypeUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    is_active: Optional[bool] = None
+    sport_ids: Optional[List[int]] = None
+
+class MarketTypeOut(MarketTypeBase):
+    id: int
+    sports: List[SportOut] = []
+    class Config:
+        from_attributes = True
+
+class MarketTypeStat(MarketTypeOut):
+    bets_count: int = 0
+    win_rate: float = 0.0
+    profit: Decimal = Decimal("0")
+
+
 # ─── Ticket ──────────────────────────────────────────────
 
 class TicketCreate(BaseModel):
     bookmaker_id: int
     sport_id: int
     league_id: Optional[int] = None
+    market_type_id: Optional[int] = None
     home_team: str
     away_team: str
     event_date: Optional[datetime] = None
-    market_type: Optional[str] = None
     market_label: Optional[str] = None
     selection: Optional[str] = None
     odds: Decimal
@@ -68,10 +96,10 @@ class TicketUpdate(BaseModel):
     bookmaker_id: Optional[int] = None
     sport_id: Optional[int] = None
     league_id: Optional[int] = None
+    market_type_id: Optional[int] = None
     home_team: Optional[str] = None
     away_team: Optional[str] = None
     event_date: Optional[datetime] = None
-    market_type: Optional[str] = None
     market_label: Optional[str] = None
     selection: Optional[str] = None
     odds: Optional[Decimal] = None
@@ -87,10 +115,10 @@ class TicketOut(BaseModel):
     bookmaker_id: int
     sport_id: int
     league_id: Optional[int] = None
+    market_type_id: Optional[int] = None
     home_team: str
     away_team: str
     event_date: Optional[datetime] = None
-    market_type: Optional[str] = None
     market_label: Optional[str] = None
     selection: Optional[str] = None
     odds: Decimal
@@ -108,9 +136,11 @@ class TicketOut(BaseModel):
     bookmaker: Optional[BookmakerOut] = None
     sport: Optional[SportOut] = None
     league: Optional[LeagueOut] = None
+    market_type: Optional[MarketTypeOut] = Field(alias="market_type_rel", default=None)
 
     class Config:
         from_attributes = True
+        populate_by_name = True
 
 
 # ─── Stats ───────────────────────────────────────────────
@@ -123,6 +153,7 @@ class OverallStats(BaseModel):
     roi_percent: float = 0.0
     hit_rate_percent: float = 0.0
     avg_odds: float = 0.0
+    current_streak: int = 0
     best_streak: int = 0
     worst_streak: int = 0
     max_drawdown: Decimal = Decimal("0")
@@ -157,11 +188,11 @@ class StatsOverview(BaseModel):
     overall: OverallStats
     weekly: WeeklyStats
     by_sport: List[GroupedStat] = []
+    by_bookmaker: List[GroupedStat] = []
+    by_league: List[GroupedStat] = []
     by_market_type: List[GroupedStat] = []
     by_odds_bucket: List[GroupedStat] = []
     by_month: List[GroupedStat] = []
-    live_vs_prematch: List[GroupedStat] = []
-    by_weekday: List[GroupedStat] = []
 
 
 # ─── AI ──────────────────────────────────────────────────

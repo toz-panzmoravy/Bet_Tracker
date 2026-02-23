@@ -94,7 +94,7 @@ function BarLabel({ x, y, width, value }) {
 
 /* ─── ROI Bar Chart (reusable) ─────────────────────────── */
 
-function RoiBarChart({ data, positiveColor = "#22c55e", negativeColor = "#ef4444" }) {
+function RoiBarChart({ data, positiveColor = "#22c55e", negativeColor = "#ef4444", colorMap = null }) {
   if (!data?.length) return <EmptyState />;
   return (
     <ResponsiveContainer width="100%" height={280}>
@@ -115,9 +115,13 @@ function RoiBarChart({ data, positiveColor = "#22c55e", negativeColor = "#ef4444
         <Tooltip content={<RichBarTooltip />} cursor={{ fill: "rgba(99, 102, 241, 0.06)" }} />
         <Bar dataKey="roi_percent" name="ROI %" radius={[8, 8, 0, 0]} maxBarSize={50}>
           <LabelList content={<BarLabel />} />
-          {data.map((entry, i) => (
-            <Cell key={i} fill={entry.roi_percent >= 0 ? positiveColor : negativeColor} fillOpacity={0.85} />
-          ))}
+          {data.map((entry, i) => {
+            let fill = entry.roi_percent >= 0 ? positiveColor : negativeColor;
+            if (colorMap && colorMap[entry.label]) {
+              fill = colorMap[entry.label];
+            }
+            return <Cell key={i} fill={fill} fillOpacity={0.85} />;
+          })}
         </Bar>
       </BarChart>
     </ResponsiveContainer>
@@ -252,8 +256,8 @@ function WeeklySummary({ data }) {
 
   return (
     <div style={{ display: "flex", gap: 12, marginBottom: "1.5rem" }}>
-      <Card title="Tento týden" stats={current_week} type="current" />
-      <Card title="Minulý týden" stats={last_week} type="last" />
+      <Card title="Posledních 7 dní" stats={current_week} type="current" />
+      <Card title="Předchozích 7 dní" stats={last_week} type="last" />
     </div>
   );
 }
@@ -352,7 +356,6 @@ function FilterDropdown({ filters, setFilters, sports, bookmakers }) {
 const TABS = [
   { id: "prehled", label: "📊 Přehled" },
   { id: "trhy", label: "🔍 Trhy" },
-  { id: "vzorce", label: "⚡ Vzorce" },
 ];
 
 function TabBar({ active, onChange }) {
@@ -494,7 +497,9 @@ export default function Dashboard() {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: "1.5rem" }}>
             <KpiCard label="Počet sázek" value={o.bets_count || 0} color="yellow" icon="🎫" />
             <KpiCard label="Ø Kurz" value={o.avg_odds || 0} color="accent" icon="📊" />
-            <KpiCard label="🔥 Nejlepší série" value={`${o.best_streak || 0}×`} color="green" icon="🏆" />
+            <KpiCard label="🔥 Série (Aktuální)" value={`${o.current_streak > 0 ? '+' : ''}${o.current_streak || 0}`}
+              suffix={`(Max: +${o.best_streak || 0}, Min: -${o.worst_streak || 0})`}
+              color={o.current_streak >= 0 ? "green" : "red"} icon="🔥" />
             <KpiCard label="📉 Max drawdown" value={`${Number(o.max_drawdown || 0).toLocaleString("cs-CZ")} Kč`}
               suffix={o.max_drawdown_percent ? `(${o.max_drawdown_percent}%)` : ""}
               color={o.max_drawdown > 0 ? "red" : "accent"} icon="🩸" />
@@ -577,6 +582,27 @@ export default function Dashboard() {
                   <RoiBarChart data={stats?.by_sport} />
                 </ChartCard>
 
+                <ChartCard
+                  title="🏢 ROI podle sázkovky"
+                  subtitle="Kde jsi nejziskovější?"
+                >
+                  <RoiBarChart
+                    data={stats?.by_bookmaker}
+                    positiveColor="#8b5cf6"
+                    colorMap={{
+                      "Tipsport": "#3b82f6", // Modrá
+                      "Betano": "#f97316"    // Oranžová
+                    }}
+                  />
+                </ChartCard>
+
+                <ChartCard
+                  title="⚽ ROI podle ligy"
+                  subtitle="Jaké soutěže ti jdou?"
+                >
+                  <RoiBarChart data={stats?.by_league} positiveColor="#f43f5e" />
+                </ChartCard>
+
                 <div style={{ gridColumn: "span 2" }}>
                   <MonthlyStatsTable data={stats?.by_month} />
                 </div>
@@ -602,34 +628,7 @@ export default function Dashboard() {
               </>
             )}
 
-            {/* ─── Vzorce ─── */}
-            {activeTab === "vzorce" && (
-              <>
-                <ChartCard title="⚡ Live vs Prematch" subtitle="Kde sázíš lépe?">
-                  {stats?.live_vs_prematch?.length > 0 ? (
-                    <ResponsiveContainer width="100%" height={280}>
-                      <BarChart data={stats.live_vs_prematch} margin={{ top: 20, right: 10, left: 0, bottom: 5 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(42, 45, 62, 0.5)" vertical={false} />
-                        <XAxis dataKey="label" tick={{ fill: "#8b8fa3", fontSize: 12 }} axisLine={false} tickLine={false} />
-                        <YAxis tick={{ fill: "#5c6078", fontSize: 10 }} axisLine={false} tickLine={false} />
-                        <Tooltip content={<RichBarTooltip />} cursor={{ fill: "rgba(99, 102, 241, 0.06)" }} />
-                        <Bar dataKey="roi_percent" name="ROI %" radius={[8, 8, 0, 0]} maxBarSize={60}>
-                          <LabelList content={<BarLabel />} />
-                          {stats.live_vs_prematch.map((entry, i) => (
-                            <Cell key={i} fill={entry.roi_percent >= 0 ? "#22c55e" : "#ef4444"} fillOpacity={0.85} />
-                          ))}
-                        </Bar>
-                        <Bar dataKey="bets_count" name="Počet sázek" radius={[8, 8, 0, 0]} fill="#6366f1" fillOpacity={0.25} maxBarSize={60} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  ) : <EmptyState />}
-                </ChartCard>
-
-                <ChartCard title="📅 ROI podle dne v týdnu" subtitle="Kdy sázet a kdy ne?">
-                  <RoiBarChart data={stats?.by_weekday} positiveColor="#8b5cf6" />
-                </ChartCard>
-              </>
-            )}
+            {/* ─── Vzorce ZRUŠENO ─── */}
           </div>
         </>
       )}

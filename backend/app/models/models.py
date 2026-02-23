@@ -2,7 +2,7 @@ import enum
 from datetime import datetime
 from sqlalchemy import (
     Column, Integer, String, Numeric, Boolean, DateTime,
-    ForeignKey, Enum, Text, JSON
+    ForeignKey, Enum, Text, JSON, Table
 )
 from sqlalchemy.orm import relationship
 from app.database import Base
@@ -65,6 +65,27 @@ class League(Base):
     tickets = relationship("Ticket", back_populates="league")
 
 
+# Association table for Market Types and Sports
+market_type_sports = Table(
+    "market_type_sports",
+    Base.metadata,
+    Column("market_type_id", Integer, ForeignKey("market_types.id"), primary_key=True),
+    Column("sport_id", Integer, ForeignKey("sports.id"), primary_key=True)
+)
+
+
+class MarketType(Base):
+    __tablename__ = "market_types"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), nullable=False, unique=True)
+    description = Column(String(500), nullable=True)
+    is_active = Column(Boolean, default=True)
+
+    tickets = relationship("Ticket", back_populates="market_type_rel")
+    sports = relationship("Sport", secondary=market_type_sports)
+
+
 # ─── Main Table ──────────────────────────────────────────
 
 class Ticket(Base):
@@ -80,6 +101,7 @@ class Ticket(Base):
     bookmaker_id = Column(Integer, ForeignKey("bookmakers.id"), nullable=False)
     sport_id = Column(Integer, ForeignKey("sports.id"), nullable=False)
     league_id = Column(Integer, ForeignKey("leagues.id"), nullable=True)
+    market_type_id = Column(Integer, ForeignKey("market_types.id"), nullable=True)
 
     # Event
     home_team = Column(String(200), nullable=False)
@@ -87,7 +109,6 @@ class Ticket(Base):
     event_date = Column(DateTime, nullable=True)
 
     # Sázka
-    market_type = Column(String(50), nullable=True)       # 1X2, over_under, handicap...
     market_label = Column(String(200), nullable=True)      # "Méně než 1.0", "Over 2.5"
     selection = Column(String(200), nullable=True)          # home, draw, over...
     odds = Column(Numeric(8, 2), nullable=False)
@@ -110,6 +131,7 @@ class Ticket(Base):
     bookmaker = relationship("Bookmaker", back_populates="tickets")
     sport = relationship("Sport", back_populates="tickets")
     league = relationship("League", back_populates="tickets")
+    market_type_rel = relationship("MarketType", back_populates="tickets")
 
 
 # ─── AI Analyses ─────────────────────────────────────────
