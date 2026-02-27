@@ -73,7 +73,7 @@ class MarketTypeStat(MarketTypeOut):
 # ─── Ticket ──────────────────────────────────────────────
 
 class TicketCreate(BaseModel):
-    bookmaker_id: int
+    bookmaker_id: Optional[int] = None
     sport_id: int
     league_id: Optional[int] = None
     market_type_id: Optional[int] = None
@@ -112,7 +112,7 @@ class TicketUpdate(BaseModel):
 
 class TicketOut(BaseModel):
     id: int
-    bookmaker_id: int
+    bookmaker_id: Optional[int] = None
     sport_id: int
     league_id: Optional[int] = None
     market_type_id: Optional[int] = None
@@ -193,6 +193,17 @@ class StatsOverview(BaseModel):
     by_market_type: List[GroupedStat] = []
     by_odds_bucket: List[GroupedStat] = []
     by_month: List[GroupedStat] = []
+
+
+# ─── App Settings / Bankroll ─────────────────────────────
+
+
+class AppSettingsOut(BaseModel):
+    bankroll: Decimal | None = None
+
+
+class AppSettingsUpdate(BaseModel):
+    bankroll: Decimal | None = None
 
 
 # ─── AI ──────────────────────────────────────────────────

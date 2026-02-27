@@ -4,7 +4,7 @@ import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Cell, Legend, LabelList
 } from "recharts";
-import { getStatsOverview, getTimeseries, aiAnalyze, getSports, getBookmakers } from "./lib/api";
+import { getStatsOverview, getTimeseries, aiAnalyze, getSports, getBookmakers, getAppSettings } from "./lib/api";
 import { useToast } from "./components/Toast";
 import { DashboardSkeleton } from "./components/Skeletons";
 import Confetti from "./components/Confetti";
@@ -94,8 +94,21 @@ function BarLabel({ x, y, width, value }) {
 
 /* ─── ROI Bar Chart (reusable) ─────────────────────────── */
 
-function RoiBarChart({ data, positiveColor = "#22c55e", negativeColor = "#ef4444", colorMap = null }) {
+function RoiBarChart({
+  data,
+  positiveColor = "#22c55e",
+  negativeColor = "#ef4444",
+  colorMap = null,
+  highlightBest = false,
+}) {
   if (!data?.length) return <EmptyState />;
+
+  // Najdeme nejlepší řádek podle ROI pro zvýraznění sloupcem
+  const best =
+    highlightBest && data.length > 0
+      ? data.reduce((acc, item) => (acc == null || item.roi_percent > acc.roi_percent ? item : acc), null)
+      : null;
+
   return (
     <ResponsiveContainer width="100%" height={280}>
       <BarChart data={data} margin={{ top: 20, right: 10, left: 0, bottom: 5 }}>
@@ -120,7 +133,16 @@ function RoiBarChart({ data, positiveColor = "#22c55e", negativeColor = "#ef4444
             if (colorMap && colorMap[entry.label]) {
               fill = colorMap[entry.label];
             }
-            return <Cell key={i} fill={fill} fillOpacity={0.85} />;
+            const isBest = best && entry.label === best.label;
+            return (
+              <Cell
+                key={i}
+                fill={fill}
+                fillOpacity={isBest ? 1 : 0.85}
+                stroke={isBest ? "#e5e7eb" : "none"}
+                strokeWidth={isBest ? 1.5 : 0}
+              />
+            );
           })}
         </Bar>
       </BarChart>
@@ -264,9 +286,53 @@ function WeeklySummary({ data }) {
 
 /* ─── Filter Dropdown ──────────────────────────────────── */
 
+const DATE_PRESETS = [
+  { id: "all", label: "Celé období" },
+  { id: "7d", label: "7 dní" },
+  { id: "30d", label: "30 dní" },
+  { id: "90d", label: "90 dní" },
+  { id: "month", label: "Aktuální měsíc" },
+];
+
+function applyDatePreset(presetId, setFilters) {
+  const now = new Date();
+  let from = null;
+  let to = null;
+
+  if (presetId === "7d") {
+    to = now;
+    from = new Date();
+    from.setDate(now.getDate() - 7);
+  } else if (presetId === "30d") {
+    to = now;
+    from = new Date();
+    from.setDate(now.getDate() - 30);
+  } else if (presetId === "90d") {
+    to = now;
+    from = new Date();
+    from.setDate(now.getDate() - 90);
+  } else if (presetId === "month") {
+    to = now;
+    from = new Date(now.getFullYear(), now.getMonth(), 1);
+  }
+
+  setFilters((prev) => {
+    const next = { ...prev };
+    if (!from || !to) {
+      delete next.date_from;
+      delete next.date_to;
+    } else {
+      next.date_from = from.toISOString().slice(0, 10);
+      next.date_to = to.toISOString().slice(0, 10);
+    }
+    next._date_preset = presetId === "all" ? undefined : presetId;
+    return next;
+  });
+}
+
 function FilterDropdown({ filters, setFilters, sports, bookmakers }) {
   const [isOpen, setIsOpen] = useState(false);
-  const activeCount = Object.keys(filters).length;
+  const activeCount = Object.keys(filters).filter((k) => !k.startsWith("_")).length;
 
   return (
     <div style={{ position: "relative" }}>
@@ -304,6 +370,29 @@ function FilterDropdown({ filters, setFilters, sports, bookmakers }) {
             display: "flex", flexDirection: "column", gap: 12
           }}>
             <h4 style={{ fontSize: "0.8rem", fontWeight: 700, marginBottom: 4 }}>Nastavení filtrů</h4>
+
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 4 }}>
+                {DATE_PRESETS.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    className="btn btn-ghost"
+                    style={{
+                      padding: "4px 8px",
+                      fontSize: "0.75rem",
+                      borderRadius: 999,
+                      border:
+                        filters._date_preset === p.id ||
+                        (p.id === "all" && !filters._date_preset && !filters.date_from && !filters.date_to)
+                          ? "1px solid var(--color-accent)"
+                          : "1px solid transparent",
+                    }}
+                    onClick={() => applyDatePreset(p.id, setFilters)}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
 
             <div className="form-group">
               <label style={{ fontSize: "0.75rem", color: "#8b8fa3", display: "block", marginBottom: 4 }}>Sport</label>
@@ -405,12 +494,14 @@ export default function Dashboard() {
   const [bookmakers, setBookmakers] = useState([]);
   const [activeTab, setActiveTab] = useState("prehled");
   const [showConfetti, setShowConfetti] = useState(false);
+  const [bankroll, setBankroll] = useState(null);
   const toast = useToast();
 
   useEffect(() => {
     loadData();
     getSports().then(setSports).catch(() => { });
     getBookmakers().then(setBookmakers).catch(() => { });
+    getAppSettings().then((data) => setBankroll(data?.bankroll ?? null)).catch(() => { });
   }, []);
 
   useEffect(() => { loadData(); }, [filters]);
@@ -454,6 +545,26 @@ export default function Dashboard() {
   const bestSport = stats?.by_sport?.reduce((best, s) => (!best || s.roi_percent > best.roi_percent) ? s : best, null);
   const bestMarket = stats?.by_market_type?.reduce((best, s) => (!best || s.roi_percent > best.roi_percent) ? s : best, null);
 
+  // Připravíme data pro ROI grafy: seřazeno a s minimálním počtem sázek, aby ROI z 1–2 tiketů nezkreslovalo
+  function prepareGrouped(data, { minBets = 5, sortBy = "roi", limit = 10 } = {}) {
+    if (!data) return [];
+    const filtered = data.filter((d) => d.bets_count >= minBets);
+    const sorted = [...filtered].sort((a, b) => {
+      if (sortBy === "profit") {
+        return Number(b.profit_total || 0) - Number(a.profit_total || 0);
+      }
+      // default: roi
+      return (b.roi_percent || 0) - (a.roi_percent || 0);
+    });
+    return sorted.slice(0, limit);
+  }
+
+  const bySportPrepared = prepareGrouped(stats?.by_sport, { minBets: 5, sortBy: "roi", limit: 8 });
+  const byBookmakerPrepared = prepareGrouped(stats?.by_bookmaker, { minBets: 5, sortBy: "roi", limit: 8 });
+  const byLeaguePrepared = prepareGrouped(stats?.by_league, { minBets: 5, sortBy: "roi", limit: 12 });
+  const byMarketPrepared = prepareGrouped(stats?.by_market_type, { minBets: 5, sortBy: "roi", limit: 12 });
+  const byOddsBucketPrepared = prepareGrouped(stats?.by_odds_bucket, { minBets: 1, sortBy: "roi", limit: 10 });
+
   return (
     <div>
       <Confetti active={showConfetti} onDone={() => setShowConfetti(false)} />
@@ -489,20 +600,70 @@ export default function Dashboard() {
         <>
           {/* KPI Cards */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: "1rem" }}>
-            <KpiCard label="Celkový profit" value={`${Number(o.profit_total || 0).toLocaleString("cs-CZ")} Kč`} color={profitColor} icon="💰" />
-            <KpiCard label="ROI" value={`${o.roi_percent || 0}%`} color={o.roi_percent >= 0 ? "green" : "red"} icon="📈" />
-            <KpiCard label="Hit rate" value={`${o.hit_rate_percent || 0}%`} color="blue" icon="🎯" />
-            <KpiCard label="Celkový vklad" value={`${Number(o.stake_total || 0).toLocaleString("cs-CZ")} Kč`} color="accent" icon="💵" />
+            <KpiCard
+              label="Celkový profit"
+              value={`${Number(o.profit_total || 0).toLocaleString("cs-CZ")} Kč`}
+              color={profitColor}
+              icon="💰"
+            />
+            <KpiCard
+              label="ROI (yield)"
+              value={`${o.roi_percent || 0}%`}
+              color={o.roi_percent >= 0 ? "green" : "red"}
+              icon="📈"
+            />
+            <KpiCard
+              label="Hit rate"
+              value={`${o.hit_rate_percent || 0}%`}
+              color="blue"
+              icon="🎯"
+            />
+            <KpiCard
+              label="Obrat sázek (vkladů)"
+              value={`${Number(o.stake_total || 0).toLocaleString("cs-CZ")} Kč`}
+              color="accent"
+              icon="💵"
+            />
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: "1.5rem" }}>
-            <KpiCard label="Počet sázek" value={o.bets_count || 0} color="yellow" icon="🎫" />
-            <KpiCard label="Ø Kurz" value={o.avg_odds || 0} color="accent" icon="📊" />
-            <KpiCard label="🔥 Série (Aktuální)" value={`${o.current_streak > 0 ? '+' : ''}${o.current_streak || 0}`}
-              suffix={`(Max: +${o.best_streak || 0}, Min: -${o.worst_streak || 0})`}
-              color={o.current_streak >= 0 ? "green" : "red"} icon="🔥" />
-            <KpiCard label="📉 Max drawdown" value={`${Number(o.max_drawdown || 0).toLocaleString("cs-CZ")} Kč`}
-              suffix={o.max_drawdown_percent ? `(${o.max_drawdown_percent}%)` : ""}
-              color={o.max_drawdown > 0 ? "red" : "accent"} icon="🩸" />
+            <KpiCard
+              label="Počet sázek"
+              value={o.bets_count || 0}
+              color="yellow"
+              icon="🎫"
+            />
+            <KpiCard
+              label="Ø Kurz"
+              value={o.avg_odds || 0}
+              color="accent"
+              icon="📊"
+            />
+            <KpiCard
+              label="💼 Bankroll"
+              value={
+                bankroll != null
+                  ? `${Number(bankroll).toLocaleString("cs-CZ")} Kč`
+                  : "Nenastaveno"
+              }
+              color="accent"
+              icon="💼"
+            />
+            <KpiCard
+              label="📈 Zhodnocení bankrollu"
+              value={
+                bankroll != null && Number(bankroll) > 0
+                  ? `${((Number(o.profit_total || 0) / Number(bankroll)) * 100).toFixed(2)}%`
+                  : "—"
+              }
+              color={
+                bankroll != null && Number(bankroll) > 0 && Number(o.profit_total || 0) >= 0
+                  ? "green"
+                  : bankroll != null && Number(bankroll) > 0 && Number(o.profit_total || 0) < 0
+                  ? "red"
+                  : "accent"
+              }
+              icon="📊"
+            />
           </div>
 
           {/* Tabs */}
@@ -577,18 +738,23 @@ export default function Dashboard() {
 
                 <ChartCard
                   title="🏆 ROI podle sportu"
-                  subtitle={bestSport ? `Nejlepší: ${bestSport.label} (${bestSport.roi_percent > 0 ? "+" : ""}${bestSport.roi_percent}%)` : null}
+                  subtitle={
+                    bestSport
+                      ? `Nejlepší: ${bestSport.label} (${bestSport.roi_percent > 0 ? "+" : ""}${bestSport.roi_percent}%) • Zobrazené jen sporty s ≥ 5 sázkami`
+                      : "Zobrazují se jen sporty s alespoň 5 sázkami"
+                  }
                 >
-                  <RoiBarChart data={stats?.by_sport} />
+                  <RoiBarChart data={bySportPrepared} highlightBest />
                 </ChartCard>
 
                 <ChartCard
                   title="🏢 ROI podle sázkovky"
-                  subtitle="Kde jsi nejziskovější?"
+                  subtitle="Kde jsi nejziskovější? Zobrazené jen sázkovky s ≥ 5 sázkami"
                 >
                   <RoiBarChart
-                    data={stats?.by_bookmaker}
+                    data={byBookmakerPrepared}
                     positiveColor="#8b5cf6"
+                    highlightBest
                     colorMap={{
                       "Tipsport": "#3b82f6", // Modrá
                       "Betano": "#f97316"    // Oranžová
@@ -598,9 +764,9 @@ export default function Dashboard() {
 
                 <ChartCard
                   title="⚽ ROI podle ligy"
-                  subtitle="Jaké soutěže ti jdou?"
+                  subtitle="Jaké soutěže ti jdou? Zobrazené jen ligy s ≥ 5 sázkami"
                 >
-                  <RoiBarChart data={stats?.by_league} positiveColor="#f43f5e" />
+                  <RoiBarChart data={byLeaguePrepared} positiveColor="#f43f5e" highlightBest />
                 </ChartCard>
 
                 <div style={{ gridColumn: "span 2" }}>
@@ -614,16 +780,20 @@ export default function Dashboard() {
               <>
                 <ChartCard
                   title="🎲 ROI podle typu sázky"
-                  subtitle={bestMarket ? `Nejlepší: ${bestMarket.label} (${bestMarket.roi_percent > 0 ? "+" : ""}${bestMarket.roi_percent}%)` : null}
+                  subtitle={
+                    bestMarket
+                      ? `Nejlepší: ${bestMarket.label} (${bestMarket.roi_percent > 0 ? "+" : ""}${bestMarket.roi_percent}%) • Zobrazené jen trhy s ≥ 5 sázkami`
+                      : "Zobrazují se jen typy sázek s alespoň 5 sázkami"
+                  }
                 >
-                  <RoiBarChart data={stats?.by_market_type} positiveColor="#3b82f6" />
+                  <RoiBarChart data={byMarketPrepared} positiveColor="#3b82f6" highlightBest />
                 </ChartCard>
 
                 <ChartCard
                   title="🎰 ROI podle kurzového pásma"
-                  subtitle="Kde máš edge?"
+                  subtitle="Kde máš edge? Seřazeno podle ROI"
                 >
-                  <RoiBarChart data={stats?.by_odds_bucket} positiveColor="#eab308" />
+                  <RoiBarChart data={byOddsBucketPrepared} positiveColor="#eab308" highlightBest />
                 </ChartCard>
               </>
             )}

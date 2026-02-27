@@ -8,6 +8,7 @@ from app.routers.ocr import router as ocr_router
 from app.routers.ai import router as ai_router
 from app.routers.meta import router as meta_router
 from app.routers.market_types import router as market_types_router
+from app.routers.settings import router as settings_router
 
 settings = get_settings()
 
@@ -32,6 +33,7 @@ app.include_router(ocr_router)
 app.include_router(ai_router)
 app.include_router(meta_router)
 app.include_router(market_types_router)
+app.include_router(settings_router)
 
 
 @app.get("/")

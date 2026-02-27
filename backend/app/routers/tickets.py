@@ -27,8 +27,14 @@ def create_ticket(data: TicketCreate, db: Session = Depends(get_db)):
 
     db.add(ticket)
     db.commit()
-    db.refresh(ticket)
-    return ticket
+    
+    # Re-fetch with relationships to ensure they are populated in the response
+    return db.query(Ticket).options(
+        joinedload(Ticket.bookmaker),
+        joinedload(Ticket.sport),
+        joinedload(Ticket.league),
+        joinedload(Ticket.market_type_rel),
+    ).filter(Ticket.id == ticket.id).first()
 
 
 @router.get("", response_model=List[TicketOut])
@@ -102,7 +108,12 @@ def get_ticket(ticket_id: int, db: Session = Depends(get_db)):
 @router.put("/{ticket_id}", response_model=TicketOut)
 def update_ticket(ticket_id: int, data: TicketUpdate, db: Session = Depends(get_db)):
     """Upravit tiket."""
-    ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
+    ticket = db.query(Ticket).options(
+        joinedload(Ticket.bookmaker),
+        joinedload(Ticket.sport),
+        joinedload(Ticket.league),
+        joinedload(Ticket.market_type_rel),
+    ).filter(Ticket.id == ticket_id).first()
     if not ticket:
         raise HTTPException(status_code=404, detail="Tiket nenalezen")
 
@@ -124,8 +135,14 @@ def update_ticket(ticket_id: int, data: TicketUpdate, db: Session = Depends(get_
         ticket.payout = ticket.stake
 
     db.commit()
-    db.refresh(ticket)
-    return ticket
+    
+    # Re-fetch with relationships to ensure they are populated in the response
+    return db.query(Ticket).options(
+        joinedload(Ticket.bookmaker),
+        joinedload(Ticket.sport),
+        joinedload(Ticket.league),
+        joinedload(Ticket.market_type_rel),
+    ).filter(Ticket.id == ticket_id).first()
 
 
 @router.delete("/{ticket_id}")

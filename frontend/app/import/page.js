@@ -5,7 +5,7 @@ import { ocrParseBase64, createTicket, getSports, getLeagues, getBookmakers, get
 const EMPTY_TICKET = {
     home_team: "", away_team: "", sport: "", league: "",
     market_label: "", selection: "", odds: "", stake: "",
-    payout: "", status: "open", is_live: false,
+    payout: "", status: "open", is_live: false, bookmaker_id: null
 };
 
 export default function ImportPage() {
@@ -38,7 +38,10 @@ export default function ImportPage() {
     useEffect(() => {
         getSports().then(setSports).catch(() => { });
         getLeagues().then(setLeagues).catch(() => { });
-        getBookmakers().then(setBookmakers).catch(() => { });
+        getBookmakers().then(list => {
+            const filtered = list.filter(b => ['Tipsport', 'Betano'].includes(b.name));
+            setBookmakers(filtered);
+        }).catch(() => { });
         getMarketTypes().then(setAllMarketTypes).catch(() => { });
         getTopMarketTypes(5).then(setTopMarketTypes).catch(() => { });
     }, []);
@@ -139,7 +142,8 @@ export default function ImportPage() {
     }
 
     function addManualTicket() {
-        setParsedTickets([...parsedTickets, { ...EMPTY_TICKET }]);
+        const currentBook = bookmakers.find(b => b.name.toLowerCase() === ocrBookmakerRef.current.toLowerCase());
+        setParsedTickets([...parsedTickets, { ...EMPTY_TICKET, bookmaker_id: currentBook?.id || bookmakers[0]?.id || 1 }]);
         setShowManual(false);
     }
 
@@ -159,7 +163,13 @@ export default function ImportPage() {
             for (const t of parsedTickets) {
                 const sport = sports.find(s => s.name.toLowerCase() === (t.sport || "").toLowerCase());
                 const league = leagues.find(l => l.name.toLowerCase() === (t.league || "").toLowerCase());
-                const bookmaker = bookmakers[0];
+
+                // Get bookmaker from ticket data (manual) or fall back to OCR selection
+                let bookmakerId = t.bookmaker_id;
+                if (!bookmakerId) {
+                    const ocrBook = bookmakers.find(b => b.name.toLowerCase() === ocrBookmakerRef.current.toLowerCase());
+                    bookmakerId = ocrBook?.id || bookmakers[0]?.id || 1;
+                }
 
                 // Vyhledat nebo vytvořit MarketType podle market_label
                 let marketTypeId = null;
@@ -180,7 +190,7 @@ export default function ImportPage() {
                 }
 
                 await createTicket({
-                    bookmaker_id: bookmaker?.id || 1,
+                    bookmaker_id: bookmakerId,
                     sport_id: sport?.id || 1,
                     league_id: league?.id || null,
                     market_type_id: marketTypeId,
@@ -252,13 +262,31 @@ export default function ImportPage() {
             {/* Výběr zdroje OCR */}
             <div style={{ marginBottom: 16, display: "flex", gap: 16, alignItems: "center", background: "var(--color-bg-card)", padding: "12px 16px", borderRadius: 12, border: "1px solid var(--color-border)" }}>
                 <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>Vyberte sázkovou kancelář před nahráním tiketu:</span>
-                <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.85rem", cursor: "pointer", opacity: ocrBookmaker === "tipsport" ? 1 : 0.6 }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "0.85rem", cursor: "pointer", opacity: ocrBookmaker === "tipsport" ? 1 : 0.6 }}>
                     <input type="radio" name="ocrBookmaker" value="tipsport" checked={ocrBookmaker === "tipsport"} onChange={() => handleBookmakerChange("tipsport")} />
-                    ⚫ Tipsport (Tmavý)
+                    <span style={{
+                        border: "1.5px solid #3498db",
+                        color: "#3498db",
+                        padding: "1px 6px",
+                        borderRadius: "4px",
+                        fontWeight: 800,
+                        fontSize: "0.75rem",
+                        lineHeight: "1"
+                    }}>T</span>
+                    <span style={{ color: ocrBookmaker === "tipsport" ? "#3498db" : "inherit" }}>Tipsport</span>
                 </label>
-                <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.85rem", cursor: "pointer", opacity: ocrBookmaker === "betano" ? 1 : 0.6 }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "0.85rem", cursor: "pointer", opacity: ocrBookmaker === "betano" ? 1 : 0.6 }}>
                     <input type="radio" name="ocrBookmaker" value="betano" checked={ocrBookmaker === "betano"} onChange={() => handleBookmakerChange("betano")} />
-                    ⚪ Betano (Světlý)
+                    <span style={{
+                        border: "1.5px solid #ff7000",
+                        color: "#ff7000",
+                        padding: "1px 6px",
+                        borderRadius: "4px",
+                        fontWeight: 800,
+                        fontSize: "0.75rem",
+                        lineHeight: "1"
+                    }}>B</span>
+                    <span style={{ color: ocrBookmaker === "betano" ? "#ff7000" : "inherit" }}>Betano</span>
                 </label>
             </div>
 
@@ -375,6 +403,7 @@ export default function ImportPage() {
                                     <TicketForm key={i} ticket={t} index={i} sports={sports}
                                         allMarketTypes={allMarketTypes}
                                         topMarketTypes={topMarketTypes}
+                                        bookmakers={bookmakers}
                                         onUpdate={updateTicket} onRemove={removeTicket} />
                                 ))}
                             </div>
@@ -522,7 +551,7 @@ function MarketTypeSelect({ value, allMarketTypes, onUpdate, sportId }) {
     );
 }
 
-function TicketForm({ ticket: t, index: i, sports, allMarketTypes, topMarketTypes, onUpdate, onRemove }) {
+function TicketForm({ ticket: t, index: i, sports, allMarketTypes, topMarketTypes, bookmakers, onUpdate, onRemove }) {
     return (
         <div style={{
             background: "var(--color-bg-input)",
@@ -579,6 +608,21 @@ function TicketForm({ ticket: t, index: i, sports, allMarketTypes, topMarketType
                     <input className="input" style={{ padding: "6px 10px", fontSize: "0.8rem" }}
                         placeholder="Over / Under / 1X2..."
                         value={t.selection || ""} onChange={(e) => onUpdate(i, "selection", e.target.value)} />
+                </div>
+                <div>
+                    <label style={{ color: "var(--color-text-muted)", fontSize: "0.7rem" }}>Sázkovka</label>
+                    <select className="input" style={{
+                        padding: "6px 10px",
+                        fontSize: "0.8rem",
+                        color: t.bookmaker_id === bookmakers.find(b => b.name === 'Tipsport')?.id ? '#3498db' : (t.bookmaker_id === bookmakers.find(b => b.name === 'Betano')?.id ? '#ff7000' : 'inherit')
+                    }}
+                        value={t.bookmaker_id || ""} onChange={(e) => onUpdate(i, "bookmaker_id", parseInt(e.target.value))}>
+                        {bookmakers.map(b => (
+                            <option key={b.id} value={b.id} style={{ color: b.name === 'Tipsport' ? '#3498db' : '#ff7000' }}>
+                                {b.name === 'Tipsport' ? '[T] ' : '[B] '}{b.name}
+                            </option>
+                        ))}
+                    </select>
                 </div>
                 <div>
                     <label style={{ color: "var(--color-text-muted)", fontSize: "0.7rem" }}>Kurz</label>

@@ -123,6 +123,12 @@ function EditTicketModal({ ticket, onClose, onSave, sports, bookmakers }) {
                                 {sports.map(s => <option key={s.id} value={s.id}>{s.icon} {s.name}</option>)}
                             </select>
                         </div>
+                        <div className="form-group">
+                            <label style={{ fontSize: "0.75rem", color: "#8b8fa3", display: "block", marginBottom: 4 }}>Sázkovka</label>
+                            <select className="input" style={{ width: "100%" }} value={form.bookmaker_id || ""} onChange={e => setForm({ ...form, bookmaker_id: e.target.value })}>
+                                {bookmakers.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                            </select>
+                        </div>
                     </div>
 
                     <div style={{ display: "flex", gap: 12, marginTop: 10 }}>
@@ -149,7 +155,10 @@ export default function TiketyPage() {
 
     useEffect(() => {
         getSports().then(setSports).catch(() => { });
-        getBookmakers().then(setBookmakers).catch(() => { });
+        getBookmakers().then(list => {
+            const filtered = list.filter(b => ['Tipsport', 'Betano'].includes(b.name));
+            setBookmakers(filtered);
+        }).catch(() => { });
     }, []);
 
     useEffect(() => {
@@ -315,6 +324,7 @@ export default function TiketyPage() {
                                 <th onClick={() => handleSort("created_at")} style={{ cursor: "pointer" }}>
                                     Datum <SortIndicator col="created_at" />
                                 </th>
+                                <th>Sázkovka</th>
                                 <th>Sport</th>
                                 <th>Zápas</th>
                                 <th>Typ sázky</th>
@@ -340,6 +350,23 @@ export default function TiketyPage() {
                                     <tr key={t.id}>
                                         <td style={{ whiteSpace: "nowrap" }}>
                                             {t.created_at ? new Date(t.created_at).toLocaleDateString("cs-CZ") : "–"}
+                                        </td>
+                                        <td>
+                                            {t.bookmaker ? (
+                                                <span style={{
+                                                    fontSize: "0.75rem",
+                                                    padding: "2px 6px",
+                                                    borderRadius: "4px",
+                                                    border: `1.5px solid ${t.bookmaker.name === 'Tipsport' ? '#3498db' : '#ff7000'}`,
+                                                    color: t.bookmaker.name === 'Tipsport' ? '#3498db' : '#ff7000',
+                                                    fontWeight: 800,
+                                                    display: "inline-block",
+                                                    minWidth: "20px",
+                                                    textAlign: "center"
+                                                }} title={t.bookmaker.name}>
+                                                    {t.bookmaker.name === 'Tipsport' ? 'T' : 'B'}
+                                                </span>
+                                            ) : null}
                                         </td>
                                         <td>
                                             <div style={{ display: "flex", alignItems: "center", gap: 8, whiteSpace: "nowrap" }}>

@@ -148,3 +148,15 @@ export async function getLeagues(sportId) {
 export async function getBookmakers() {
   return fetchApi("/meta/bookmakers");
 }
+
+// ─── App Settings / Bankroll ─────────────────────────
+export async function getAppSettings() {
+  return fetchApi("/settings/app");
+}
+
+export async function updateAppSettings(data) {
+  return fetchApi("/settings/app", {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}

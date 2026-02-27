@@ -27,6 +27,9 @@ def _build_filters(db: Session, query, filters: dict):
         query = query.filter(Ticket.bookmaker_id == filters["bookmaker_id"])
     if filters.get("market_type_id"):
         query = query.filter(Ticket.market_type_id == filters["market_type_id"])
+    # Podpora filtrování podle jména market typu (pokud přijde z API jako string)
+    if filters.get("market_type"):
+        query = query.join(MarketType).filter(MarketType.name == filters["market_type"])
     if filters.get("is_live") is not None:
         query = query.filter(Ticket.is_live == filters["is_live"])
     if filters.get("status"):
@@ -112,7 +115,10 @@ def get_overall_stats(db: Session, filters: dict = None) -> OverallStats:
         return OverallStats()
 
     bets_count = len(all_bets)
+    # Celkový vklad všech tiketů (pro KPI "Celkový vklad")
     stake_total = sum(t.stake or 0 for t in all_bets)
+    # Vklad a profit jen z vypořádaných tiketů – pro ROI a ostatní výkonnostní metriky
+    settled_stake_total = sum(t.stake or 0 for t in settled_bets)
     profit_total = sum(t.profit or 0 for t in settled_bets)
     payout_total = sum(t.payout or 0 for t in settled_bets)
     avg_odds = sum(float(t.odds or 0) for t in all_bets) / bets_count if bets_count else 0
@@ -120,7 +126,8 @@ def get_overall_stats(db: Session, filters: dict = None) -> OverallStats:
     won_count = sum(1 for t in settled_bets if t.status == TicketStatus.won)
     settled_count = len(settled_bets)
     hit_rate = (won_count / settled_count * 100) if settled_count else 0
-    roi = (float(profit_total) / float(stake_total) * 100) if stake_total else 0
+    # ROI počítáme jen z vypořádaných tiketů
+    roi = (float(profit_total) / float(settled_stake_total) * 100) if settled_stake_total else 0
 
     current_streak, best_streak, worst_streak = _compute_streaks(settled_bets)
     max_dd, max_dd_pct = _compute_drawdown(settled_bets)
@@ -150,6 +157,7 @@ def _group_tickets(tickets: list, key_fn) -> List[GroupedStat]:
             groups[key] = {
                 "bets": 0,
                 "stake": Decimal("0"),
+                "settled_stake": Decimal("0"),
                 "profit": Decimal("0"),
                 "wins": 0,
                 "losses": 0,
@@ -168,6 +176,7 @@ def _group_tickets(tickets: list, key_fn) -> List[GroupedStat]:
             groups[key]["voids"] += 1
 
         if t.status in SETTLED_STATUSES:
+            groups[key]["settled_stake"] += Decimal(str(t.stake or 0))
             groups[key]["profit"] += Decimal(str(t.profit or 0))
 
     return [
@@ -179,7 +188,10 @@ def _group_tickets(tickets: list, key_fn) -> List[GroupedStat]:
             voids_count=data["voids"],
             stake_total=data["stake"],
             profit_total=data["profit"],
-            roi_percent=round(float(data["profit"] / data["stake"] * 100), 2) if data["stake"] else 0,
+            # ROI jen z vypořádaných tiketů
+            roi_percent=round(
+                float(data["profit"] / data["settled_stake"] * 100), 2
+            ) if data["settled_stake"] else 0,
             avg_odds=round(float(data["odds_sum"] / data["bets"]), 2) if data["bets"] > 0 else 0
         )
         for name, data in groups.items()
@@ -215,7 +227,19 @@ def get_stats_by_sport(db: Session, filters: dict = None) -> List[GroupedStat]:
 def get_stats_by_bookmaker(db: Session, filters: dict = None) -> List[GroupedStat]:
     """ROI a profit podle sázkové kanceláře."""
     all_books = db.query(Bookmaker).all()
-    groups = {b.name: {"bets": 0, "stake": Decimal("0"), "profit": Decimal("0"), "wins": 0, "losses": 0, "voids": 0, "odds_sum": 0.0} for b in all_books}
+    groups = {
+        b.name: {
+            "bets": 0,
+            "stake": Decimal("0"),
+            "settled_stake": Decimal("0"),
+            "profit": Decimal("0"),
+            "wins": 0,
+            "losses": 0,
+            "voids": 0,
+            "odds_sum": 0.0,
+        }
+        for b in all_books
+    }
 
     query = db.query(Ticket).outerjoin(Bookmaker, Ticket.bookmaker_id == Bookmaker.id)
     query = _build_filters(db, query, filters or {})
@@ -224,7 +248,16 @@ def get_stats_by_bookmaker(db: Session, filters: dict = None) -> List[GroupedSta
     for t in tickets:
         name = t.bookmaker.name if hasattr(t, 'bookmaker') and t.bookmaker else "Neznámý"
         if name not in groups:
-            groups[name] = {"bets": 0, "stake": Decimal("0"), "profit": Decimal("0"), "wins": 0, "losses": 0, "voids": 0, "odds_sum": 0.0}
+            groups[name] = {
+                "bets": 0,
+                "stake": Decimal("0"),
+                "settled_stake": Decimal("0"),
+                "profit": Decimal("0"),
+                "wins": 0,
+                "losses": 0,
+                "voids": 0,
+                "odds_sum": 0.0,
+            }
         
         groups[name]["bets"] += 1
         groups[name]["stake"] += Decimal(str(t.stake or 0))
@@ -238,6 +271,7 @@ def get_stats_by_bookmaker(db: Session, filters: dict = None) -> List[GroupedSta
             groups[name]["voids"] += 1
 
         if t.status in SETTLED_STATUSES:
+            groups[name]["settled_stake"] += Decimal(str(t.stake or 0))
             groups[name]["profit"] += Decimal(str(t.profit or 0))
 
     return [
@@ -249,7 +283,9 @@ def get_stats_by_bookmaker(db: Session, filters: dict = None) -> List[GroupedSta
             voids_count=data["voids"],
             stake_total=data["stake"],
             profit_total=data["profit"],
-            roi_percent=round(float(data["profit"] / data["stake"]) * 100, 2) if data["stake"] else 0,
+            roi_percent=round(
+                float(data["profit"] / data["settled_stake"]) * 100, 2
+            ) if data["settled_stake"] else 0,
             avg_odds=round(float(data["odds_sum"] / data["bets"]), 2) if data["bets"] > 0 else 0
         )
         for name, data in groups.items()
@@ -290,10 +326,19 @@ def get_stats_by_odds_bucket(db: Session, filters: dict = None) -> List[GroupedS
         ("5.01+", Decimal("5.01"), Decimal("999")),
     ]
 
-    groups = {name: {
-        "bets": 0, "stake": Decimal("0"), "profit": Decimal("0"),
-        "wins": 0, "losses": 0, "voids": 0, "odds_sum": 0.0
-    } for name, _, _ in buckets}
+    groups = {
+        name: {
+            "bets": 0,
+            "stake": Decimal("0"),
+            "settled_stake": Decimal("0"),
+            "profit": Decimal("0"),
+            "wins": 0,
+            "losses": 0,
+            "voids": 0,
+            "odds_sum": 0.0,
+        }
+        for name, _, _ in buckets
+    }
 
     for t in tickets:
         for name, lo, hi in buckets:
@@ -310,6 +355,7 @@ def get_stats_by_odds_bucket(db: Session, filters: dict = None) -> List[GroupedS
                     groups[name]["voids"] += 1
 
                 if t.status in SETTLED_STATUSES:
+                    groups[name]["settled_stake"] += Decimal(str(t.stake or 0))
                     groups[name]["profit"] += Decimal(str(t.profit or 0))
                 break
 
@@ -322,7 +368,9 @@ def get_stats_by_odds_bucket(db: Session, filters: dict = None) -> List[GroupedS
             voids_count=groups[name]["voids"],
             stake_total=groups[name]["stake"],
             profit_total=groups[name]["profit"],
-            roi_percent=round(float(groups[name]["profit"]) / float(groups[name]["stake"]) * 100, 2) if groups[name]["stake"] else 0,
+            roi_percent=round(
+                float(groups[name]["profit"]) / float(groups[name]["settled_stake"]) * 100, 2
+            ) if groups[name]["settled_stake"] else 0,
             avg_odds=round(groups[name]["odds_sum"] / groups[name]["bets"], 2) if groups[name]["bets"] > 0 else 0
         )
         for name, _, _ in buckets
@@ -354,8 +402,23 @@ def get_overview(db: Session, filters: dict = None) -> StatsOverview:
     """Kompletní přehled statistik."""
     (curr_start, curr_end), (last_start, last_end) = _get_week_ranges()
 
-    curr_week_stats = get_overall_stats(db, {"date_from": curr_start, "date_to": curr_end})
-    last_week_stats = get_overall_stats(db, {"date_from": last_start, "date_to": last_end})
+    base_filters = filters or {}
+
+    # Weekly přehled respektuje ostatní filtry (sport, bookmaker, atd.),
+    # ale vždy používá pevně definované datumové rozsahy pro "posledních 7 dní" a "předchozích 7 dní".
+    curr_week_filters = {
+        **base_filters,
+        "date_from": curr_start,
+        "date_to": curr_end,
+    }
+    last_week_filters = {
+        **base_filters,
+        "date_from": last_start,
+        "date_to": last_end,
+    }
+
+    curr_week_stats = get_overall_stats(db, curr_week_filters)
+    last_week_stats = get_overall_stats(db, last_week_filters)
 
     from app.schemas.schemas import WeeklyStats
     weekly = WeeklyStats(current_week=curr_week_stats, last_week=last_week_stats)

@@ -29,6 +29,7 @@ def stats_overview(
         "sport_id": sport_id,
         "league_id": league_id,
         "bookmaker_id": bookmaker_id,
+        # market_type se z API posílá jako string; ve službě podporujeme jak ID, tak jméno
         "market_type": market_type,
         "is_live": is_live,
         "status": status,

@@ -98,7 +98,7 @@ class Ticket(Base):
     id = Column(Integer, primary_key=True, index=True)
 
     # Vazby
-    bookmaker_id = Column(Integer, ForeignKey("bookmakers.id"), nullable=False)
+    bookmaker_id = Column(Integer, ForeignKey("bookmakers.id"), nullable=True)
     sport_id = Column(Integer, ForeignKey("sports.id"), nullable=False)
     league_id = Column(Integer, ForeignKey("leagues.id"), nullable=True)
     market_type_id = Column(Integer, ForeignKey("market_types.id"), nullable=True)
@@ -145,3 +145,12 @@ class AiAnalysis(Base):
     aggregates = Column(JSON, nullable=True)       # co se poslalo modelu
     model_name = Column(String(100), nullable=True)
     response_text = Column(Text, nullable=True)
+
+
+class AppSettings(Base):
+    __tablename__ = "app_settings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    bankroll = Column(Numeric(14, 2), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

@@ -156,13 +156,19 @@ def _extract_multi_from_plain_text(text: str) -> Optional[list]:
         status_match = re.search(r'(?:S|STATUS|Stav)[:\s]*(\w+)', clean_block, re.IGNORECASE)
         if status_match:
             st = status_match.group(1).lower()
-            ticket['status'] = 'won' if any(x in st for x in ['won', 'výhr', 'win']) else 'lost' if any(x in st for x in ['lost', 'proh', 'loss']) else 'open'
+            if any(x in st for x in ['won', 'výhr', 'win', 'zelen']): ticket['status'] = 'won'
+            elif any(x in st for x in ['lost', 'proh', 'loss', 'červen']): ticket['status'] = 'lost'
+            elif any(x in st for x in ['void', 'vrác', 'fialov']): ticket['status'] = 'void'
+            else: ticket['status'] = 'open'
         else:
-            if any(w in clean_block.lower() for w in ['výhra', 'won', '✓', '✅']):
+            if any(w in clean_block.lower() for w in ['výhra', 'won', '✓', '✅', 'zelené']):
                 ticket['status'] = 'won'
-            elif any(w in clean_block.lower() for w in ['prohra', 'lost', '✗', '❌']):
+            elif any(w in clean_block.lower() for w in ['prohra', 'lost', '✗', '❌', 'červené']):
                 ticket['status'] = 'lost'
                 ticket['payout'] = 0
+            elif any(w in clean_block.lower() for w in ['vráceno', 'void', 'fialové', '🟣']):
+                ticket['status'] = 'void'
+                ticket['payout'] = ticket.get('stake', 0)
             else:
                 ticket['status'] = 'open'
 
@@ -299,13 +305,17 @@ For each ticket, strictly extract the values ONLY from its own distinct block.
 Output ONLY a valid JSON array of objects. DO NOT output any conversational text.
 
 Field Extraction Guide:
-- home_team: Team before hyphen
+- home_team: Team before hyphen (usually centered)
 - away_team: Team after hyphen
-- odds: Number under 'Celkový kurz'
-- stake: Number under 'Vklad'
-- payout: Number under 'Skutečná výhra'
-- status: 'won' if ✓ (green), 'lost' if ✗ (red), 'open' if grey pyramid
-- market: Text below the teams
+- odds: Number labeled 'Celkový kurz'
+- stake: Number labeled 'Vklad'
+- payout: Number labeled 'Možná výhra' or 'Skutečná výhra'
+- status: 
+    - 'won' if icons: ✅, green circle with check, or green 'Výhra'
+    - 'lost' if icons: ❌, red circle with cross, or red 'Prohra'
+    - 'void' if icons: 🟣, purple circle, or 'Vráceno'
+    - 'open' if icons: ❔, grey circle, or 'Čeká'
+- market: Text below the teams describing the bet
 - sport: Icon next to SÓLO (⚽=Fotbal, 🎾=Tenis, 🏒=Lední hokej, 🏀=Basketbal)
 
 JSON format for each ticket (Must NOT contain comments):
