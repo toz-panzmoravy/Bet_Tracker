@@ -1,0 +1,30 @@
+ {
+  "manifest_version": 3,
+  "name": "BetTracker Tipsport Import",
+  "version": "0.1.0",
+  "description": "Scraper pro import tiketů z Tipsportu do BetTrackeru.",
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "*://*.tipsport.cz/*",
+    "*://*.betano.cz/*",
+    "http://127.0.0.1:8000/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.tipsport.cz/*",
+        "*://*.betano.cz/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}
+

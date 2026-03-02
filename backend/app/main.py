@@ -9,6 +9,9 @@ from app.routers.ai import router as ai_router
 from app.routers.meta import router as meta_router
 from app.routers.market_types import router as market_types_router
 from app.routers.settings import router as settings_router
+from app.routers.tipsport_import import router as tipsport_import_router
+from app.routers.betano_import import router as betano_import_router
+from app.routers.analytics import router as analytics_router
 
 settings = get_settings()
 
@@ -18,10 +21,11 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# CORS – povolí Next.js dev server
+# CORS – z env (CORS_ORIGINS) nebo výchozí
+_origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "http://10.0.1.42:3000"],
+    allow_origins=_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -34,6 +38,9 @@ app.include_router(ai_router)
 app.include_router(meta_router)
 app.include_router(market_types_router)
 app.include_router(settings_router)
+app.include_router(tipsport_import_router)
+app.include_router(betano_import_router)
+app.include_router(analytics_router)
 
 
 @app.get("/")

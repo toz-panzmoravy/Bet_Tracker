@@ -53,6 +53,9 @@ export default function NastaveniPage() {
       const numeric = bankroll === "" ? null : Number(bankroll.replace(",", "."));
       await updateAppSettings({ bankroll: numeric });
       setBankrollSavedAt(new Date());
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("bankroll-updated"));
+      }
     } catch {
       // v1: bez toastu – nekomplikujeme
     } finally {
@@ -71,7 +74,7 @@ export default function NastaveniPage() {
 
       {/* Bankroll */}
       <div className="glass-card" style={{ padding: "1.25rem", marginBottom: 16 }}>
-        <h3 style={{ fontSize: "0.9rem", fontWeight: 600, marginBottom: 8 }}>💼 Bankroll</h3>
+        <h2 style={{ fontSize: "0.95rem", fontWeight: 600, marginBottom: 8 }}>💼 Bankroll</h2>
         <p style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: 12 }}>
           Bankroll je částka, se kterou jsi aktuálně ochotný aktivně sázet. Tuto hodnotu můžeš
           kdykoliv ručně změnit – metriky na dashboardu (např. zhodnocení bankrollu) se přepočítají podle aktuální hodnoty.
@@ -104,9 +107,16 @@ export default function NastaveniPage() {
         )}
       </div>
 
+      {/* Ollama – upozornění */}
+      <div className="glass-card" style={{ padding: "1rem 1.25rem", marginBottom: 16, borderLeft: "4px solid var(--color-accent)" }}>
+        <p style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", margin: 0 }}>
+          <strong>Ollama a modely:</strong> Backend používá konfiguraci z <code style={{ background: "var(--color-bg-input)", padding: "2px 6px", borderRadius: 4 }}>.env</code> (OLLAMA_URL, OLLAMA_VISION_MODEL, OLLAMA_TEXT_MODEL). Změny zde v prohlížeči se neukládají na server.
+        </p>
+      </div>
+
       {/* Ollama Status */}
       <div className="glass-card" style={{ padding: "1.25rem", marginBottom: 16 }}>
-        <h3 style={{ fontSize: "0.9rem", fontWeight: 600, marginBottom: 12 }}>🤖 Ollama stav</h3>
+        <h2 style={{ fontSize: "0.95rem", fontWeight: 600, marginBottom: 12 }}>🤖 Ollama stav</h2>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span
             style={{
@@ -155,7 +165,7 @@ export default function NastaveniPage() {
 
       {/* Quick start guide */}
       <div className="glass-card" style={{ padding: "1.25rem" }}>
-        <h3 style={{ fontSize: "0.9rem", fontWeight: 600, marginBottom: 12 }}>📖 Rychlý start</h3>
+        <h2 style={{ fontSize: "0.95rem", fontWeight: 600, marginBottom: 12 }}>📖 Rychlý start</h2>
         <div
           style={{
             fontSize: "0.85rem",

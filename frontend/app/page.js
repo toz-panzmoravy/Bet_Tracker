@@ -4,7 +4,7 @@ import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Cell, Legend, LabelList
 } from "recharts";
-import { getStatsOverview, getTimeseries, aiAnalyze, getSports, getBookmakers, getAppSettings } from "./lib/api";
+import { getStatsOverview, getTimeseries, aiAnalyze, getAiAnalyses, getSports, getBookmakers, getAppSettings } from "./lib/api";
 import { useToast } from "./components/Toast";
 import { DashboardSkeleton } from "./components/Skeletons";
 import Confetti from "./components/Confetti";
@@ -176,33 +176,32 @@ function MonthlyStatsTable({ data }) {
       <table className="data-table" style={{ borderCollapse: "separate", borderSpacing: "0 4px" }}>
         <thead>
           <tr>
-            <th style={{ background: "#1e40af", color: "#fff", padding: "10px" }}>Měsíc</th>
-            <th style={{ background: "#1e40af", color: "#fff", padding: "10px" }}>Počet tipů</th>
-            <th style={{ background: "#1e40af", color: "#fff", padding: "10px" }}>WIN</th>
-            <th style={{ background: "#1e40af", color: "#fff", padding: "10px" }}>LOSE</th>
-            <th style={{ background: "#1e40af", color: "#fff", padding: "10px" }}>STORNO</th>
-            <th style={{ background: "#1e40af", color: "#fff", padding: "10px" }}>Profit</th>
-            <th style={{ background: "#1e40af", color: "#fff", padding: "10px" }}>ROI</th>
-            <th style={{ background: "#1e40af", color: "#fff", padding: "10px" }}>Kurz</th>
+            <th style={{ background: "var(--color-bg-card)", color: "var(--color-text-primary)", padding: "10px", borderBottom: "1px solid var(--color-border)" }}>Měsíc</th>
+            <th style={{ background: "var(--color-bg-card)", color: "var(--color-text-primary)", padding: "10px", borderBottom: "1px solid var(--color-border)" }}>Počet tipů</th>
+            <th style={{ background: "var(--color-bg-card)", color: "var(--color-text-primary)", padding: "10px", borderBottom: "1px solid var(--color-border)" }}>WIN</th>
+            <th style={{ background: "var(--color-bg-card)", color: "var(--color-text-primary)", padding: "10px", borderBottom: "1px solid var(--color-border)" }}>LOSE</th>
+            <th style={{ background: "var(--color-bg-card)", color: "var(--color-text-primary)", padding: "10px", borderBottom: "1px solid var(--color-border)" }}>STORNO</th>
+            <th style={{ background: "var(--color-bg-card)", color: "var(--color-text-primary)", padding: "10px", borderBottom: "1px solid var(--color-border)" }}>Profit</th>
+            <th style={{ background: "var(--color-bg-card)", color: "var(--color-text-primary)", padding: "10px", borderBottom: "1px solid var(--color-border)" }}>ROI</th>
+            <th style={{ background: "var(--color-bg-card)", color: "var(--color-text-primary)", padding: "10px", borderBottom: "1px solid var(--color-border)" }}>Kurz</th>
           </tr>
         </thead>
         <tbody>
           {data.map((m, i) => {
             const isProfit = m.profit_total >= 0;
-            const bg = isProfit ? "rgba(34, 197, 94, 0.4)" : "rgba(239, 68, 68, 0.4)";
-            const color = "#e4e6f0";
+            const bg = isProfit ? "var(--color-green-soft)" : "var(--color-red-soft)";
             return (
               <tr key={i} style={{ background: bg }}>
-                <td style={{ padding: "8px 12px", color, fontWeight: 500 }}>{m.label}</td>
-                <td style={{ padding: "8px 12px", color, textAlign: "center" }}>{m.bets_count}</td>
-                <td style={{ padding: "8px 12px", color, textAlign: "center" }}>{m.wins_count}</td>
-                <td style={{ padding: "8px 12px", color, textAlign: "center" }}>{m.losses_count}</td>
-                <td style={{ padding: "8px 12px", color, textAlign: "center" }}>{m.voids_count}</td>
-                <td style={{ padding: "8px 12px", color, fontWeight: 600 }}>
+                <td style={{ padding: "8px 12px", color: "var(--color-text-primary)", fontWeight: 500 }}>{m.label}</td>
+                <td style={{ padding: "8px 12px", color: "var(--color-text-primary)", textAlign: "center" }}>{m.bets_count}</td>
+                <td style={{ padding: "8px 12px", color: "var(--color-text-primary)", textAlign: "center" }}>{m.wins_count}</td>
+                <td style={{ padding: "8px 12px", color: "var(--color-text-primary)", textAlign: "center" }}>{m.losses_count}</td>
+                <td style={{ padding: "8px 12px", color: "var(--color-text-primary)", textAlign: "center" }}>{m.voids_count}</td>
+                <td style={{ padding: "8px 12px", color: "var(--color-text-primary)", fontWeight: 600 }}>
                   {m.profit_total > 0 ? "+" : ""}{Number(m.profit_total).toLocaleString("cs-CZ")}
                 </td>
-                <td style={{ padding: "8px 12px", color, fontWeight: 600 }}>{m.roi_percent}%</td>
-                <td style={{ padding: "8px 12px", color }}>ø{m.avg_odds}</td>
+                <td style={{ padding: "8px 12px", color: "var(--color-text-primary)", fontWeight: 600 }}>{m.roi_percent}%</td>
+                <td style={{ padding: "8px 12px", color: "var(--color-text-primary)" }}>ø{m.avg_odds}</td>
               </tr>
             );
           })}
@@ -495,6 +494,9 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState("prehled");
   const [showConfetti, setShowConfetti] = useState(false);
   const [bankroll, setBankroll] = useState(null);
+  const [showAiHistoryModal, setShowAiHistoryModal] = useState(false);
+  const [aiHistoryList, setAiHistoryList] = useState([]);
+  const [aiHistoryDetail, setAiHistoryDetail] = useState(null);
   const toast = useToast();
 
   useEffect(() => {
@@ -502,6 +504,14 @@ export default function Dashboard() {
     getSports().then(setSports).catch(() => { });
     getBookmakers().then(setBookmakers).catch(() => { });
     getAppSettings().then((data) => setBankroll(data?.bankroll ?? null)).catch(() => { });
+  }, []);
+
+  useEffect(() => {
+    const onBankrollUpdated = () => {
+      getAppSettings().then((data) => setBankroll(data?.bankroll ?? null)).catch(() => { });
+    };
+    window.addEventListener("bankroll-updated", onBankrollUpdated);
+    return () => window.removeEventListener("bankroll-updated", onBankrollUpdated);
   }, []);
 
   useEffect(() => { loadData(); }, [filters]);
@@ -535,6 +545,18 @@ export default function Dashboard() {
       toast.error("AI analýza selhala");
     } finally {
       setAiLoading(false);
+    }
+  }
+
+  async function handleOpenAiHistory() {
+    setShowAiHistoryModal(true);
+    setAiHistoryDetail(null);
+    try {
+      const list = await getAiAnalyses(20);
+      setAiHistoryList(list || []);
+    } catch (e) {
+      toast.error("Chyba načítání historie: " + e.message);
+      setAiHistoryList([]);
     }
   }
 
@@ -587,6 +609,9 @@ export default function Dashboard() {
           <button className="btn btn-primary" onClick={handleAiAnalyze}>
             🤖 AI Analýza
           </button>
+          <button className="btn btn-ghost" onClick={handleOpenAiHistory}>
+            📜 Historie analýz
+          </button>
         </div>
       </div>
 
@@ -599,7 +624,7 @@ export default function Dashboard() {
       ) : (
         <>
           {/* KPI Cards */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: "1rem" }}>
+          <div className="dashboard-kpi-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: "1rem" }}>
             <KpiCard
               label="Celkový profit"
               value={`${Number(o.profit_total || 0).toLocaleString("cs-CZ")} Kč`}
@@ -625,7 +650,7 @@ export default function Dashboard() {
               icon="💵"
             />
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: "1.5rem" }}>
+          <div className="dashboard-kpi-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: "1.5rem" }}>
             <KpiCard
               label="Počet sázek"
               value={o.bets_count || 0}
@@ -670,7 +695,7 @@ export default function Dashboard() {
           <TabBar active={activeTab} onChange={setActiveTab} />
 
           {/* Tab Content */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: "1.5rem" }}>
+          <div className="dashboard-charts-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: "1.5rem" }}>
 
             {/* ─── Přehled ─── */}
             {activeTab === "prehled" && (
@@ -828,6 +853,67 @@ export default function Dashboard() {
                 {aiResult}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* AI Historie Modal */}
+      {showAiHistoryModal && (
+        <div className="modal-overlay" onClick={() => setShowAiHistoryModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 560, maxHeight: "85vh", display: "flex", flexDirection: "column" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <h2 style={{ fontSize: "1.1rem", fontWeight: 700 }}>📜 Historie AI analýz</h2>
+              <button className="btn btn-ghost" style={{ padding: "6px 10px" }} onClick={() => setShowAiHistoryModal(false)}>✕</button>
+            </div>
+            <div style={{ overflow: "auto", flex: 1 }}>
+              {aiHistoryDetail ? (
+                <>
+                  <p style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", marginBottom: 12 }}>
+                    {aiHistoryDetail.created_at ? new Date(aiHistoryDetail.created_at).toLocaleString("cs-CZ") : ""}
+                  </p>
+                  <div style={{
+                    background: "var(--color-bg-card)",
+                    borderRadius: 12,
+                    padding: "1rem",
+                    lineHeight: 1.6,
+                    fontSize: "0.9rem",
+                    whiteSpace: "pre-wrap",
+                  }}>
+                    {aiHistoryDetail.response_text || "—"}
+                  </div>
+                  <button type="button" className="btn btn-ghost" style={{ marginTop: 12 }} onClick={() => setAiHistoryDetail(null)}>
+                    ← Zpět na seznam
+                  </button>
+                </>
+              ) : aiHistoryList.length === 0 ? (
+                <p style={{ color: "var(--color-text-muted)", fontSize: "0.9rem" }}>Zatím žádné analýzy.</p>
+              ) : (
+                <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+                  {aiHistoryList.map((item) => (
+                    <li
+                      key={item.id}
+                      onClick={() => setAiHistoryDetail(item)}
+                      style={{
+                        padding: "12px 14px",
+                        marginBottom: 8,
+                        background: "var(--color-bg-card)",
+                        borderRadius: 10,
+                        cursor: "pointer",
+                        border: "1px solid var(--color-border)",
+                      }}
+                    >
+                      <div style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", marginBottom: 4 }}>
+                        {item.created_at ? new Date(item.created_at).toLocaleString("cs-CZ") : ""}
+                      </div>
+                      <div style={{ fontSize: "0.85rem", color: "var(--color-text-primary)" }}>
+                        {(item.response_text || "").slice(0, 200)}
+                        {(item.response_text || "").length > 200 ? "…" : ""}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </div>
         </div>
       )}

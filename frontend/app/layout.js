@@ -8,6 +8,7 @@ const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: "📊" },
   { href: "/tikety", label: "Tikety", icon: "🎫" },
   { href: "/import", label: "Import", icon: "📸" },
+  { href: "/analytics", label: "Analytics", icon: "📈" },
   { href: "/market-types", label: "Typy sázek", icon: "🏷️" },
   { href: "/nastaveni", label: "Nastavení", icon: "⚙️" },
 ];
@@ -16,6 +17,7 @@ function Sidebar() {
   const pathname = usePathname();
   return (
     <aside
+      className="app-sidebar"
       style={{
         width: 240,
         minHeight: "100vh",
@@ -31,8 +33,9 @@ function Sidebar() {
       }}
     >
       {/* Logo */}
-      <div style={{ padding: "0 0.5rem", marginBottom: "2rem" }}>
-        <h1
+      <div className="sidebar-logo" style={{ padding: "0 0.5rem", marginBottom: "2rem" }}>
+        <div
+          role="banner"
           style={{
             fontSize: "1.25rem",
             fontWeight: 700,
@@ -43,8 +46,8 @@ function Sidebar() {
           }}
         >
           🎯 BetTracker
-        </h1>
-        <p style={{ fontSize: "0.7rem", color: "var(--color-text-muted)", marginTop: 4 }}>
+        </div>
+        <p className="sidebar-label" style={{ fontSize: "0.7rem", color: "var(--color-text-muted)", marginTop: 4 }}>
           Osobní sázkový tracker
         </p>
       </div>
@@ -58,17 +61,18 @@ function Sidebar() {
               key={item.href}
               href={item.href}
               className={`nav-link ${isActive ? "active" : ""}`}
+              title={item.label}
             >
               <span>{item.icon}</span>
-              <span>{item.label}</span>
+              <span className="sidebar-label">{item.label}</span>
             </Link>
           );
         })}
       </nav>
 
       {/* Footer */}
-      <div style={{ marginTop: "auto", padding: "0.5rem", fontSize: "0.7rem", color: "var(--color-text-muted)" }}>
-        v1.0.0 • Lokální režim
+      <div className="sidebar-footer" style={{ marginTop: "auto", padding: "0.5rem", fontSize: "0.7rem", color: "var(--color-text-muted)" }}>
+        <span className="sidebar-label">v1.0.0 • Lokální režim</span>
       </div>
     </aside>
   );
@@ -84,7 +88,7 @@ export default function RootLayout({ children }) {
       <body>
         <ToastProvider>
           <Sidebar />
-          <main style={{ marginLeft: 240, minHeight: "100vh", padding: "2rem" }}>
+          <main className="app-main" style={{ marginLeft: 240, minHeight: "100vh", padding: "2rem" }}>
             {children}
           </main>
         </ToastProvider>

@@ -1,6 +1,20 @@
 "use client";
 
+import { useEffect } from "react";
+
 export default function MarketTypeModal({ isOpen, onClose, onSubmit, editingId, formData, setFormData, sports = [] }) {
+    useEffect(() => {
+        if (!isOpen) return;
+        function handleKeyDown(e) {
+            if (e.key === "Escape") {
+                e.preventDefault();
+                onClose?.();
+            }
+        }
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, [isOpen, onClose]);
+
     if (!isOpen) return null;
 
     const toggleSport = (sportId) => {

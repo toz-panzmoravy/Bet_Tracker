@@ -1,7 +1,9 @@
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional, List
+from typing import Optional, List, Literal
 from pydantic import BaseModel, Field
+
+TicketStatusLiteral = Literal["open", "won", "lost", "void", "half_win", "half_loss"]
 
 
 # ─── Bookmaker ───────────────────────────────────────────
@@ -77,6 +79,7 @@ class TicketCreate(BaseModel):
     sport_id: int
     league_id: Optional[int] = None
     market_type_id: Optional[int] = None
+    parent_id: Optional[int] = None  # AKU: nadřazený tiket (subtikety mají parent_id)
     home_team: str
     away_team: str
     event_date: Optional[datetime] = None
@@ -86,7 +89,7 @@ class TicketCreate(BaseModel):
     stake: Decimal
     payout: Optional[Decimal] = None
     profit: Optional[Decimal] = None
-    status: str = "open"
+    status: TicketStatusLiteral = "open"
     ticket_type: str = "solo"
     is_live: bool = False
     source: str = "manual"
@@ -97,6 +100,7 @@ class TicketUpdate(BaseModel):
     sport_id: Optional[int] = None
     league_id: Optional[int] = None
     market_type_id: Optional[int] = None
+    parent_id: Optional[int] = None
     home_team: Optional[str] = None
     away_team: Optional[str] = None
     event_date: Optional[datetime] = None
@@ -106,7 +110,8 @@ class TicketUpdate(BaseModel):
     stake: Optional[Decimal] = None
     payout: Optional[Decimal] = None
     profit: Optional[Decimal] = None
-    status: Optional[str] = None
+    status: Optional[TicketStatusLiteral] = None
+    ticket_type: Optional[str] = None
     is_live: Optional[bool] = None
 
 
@@ -116,6 +121,7 @@ class TicketOut(BaseModel):
     sport_id: int
     league_id: Optional[int] = None
     market_type_id: Optional[int] = None
+    parent_id: Optional[int] = None
     home_team: str
     away_team: str
     event_date: Optional[datetime] = None
@@ -141,6 +147,12 @@ class TicketOut(BaseModel):
     class Config:
         from_attributes = True
         populate_by_name = True
+
+
+class TicketListResponse(BaseModel):
+    """Paginated list of tickets with total count."""
+    items: List[TicketOut]
+    total: int
 
 
 # ─── Stats ───────────────────────────────────────────────
@@ -244,9 +256,153 @@ class OcrParsedTicket(BaseModel):
     payout: Optional[Decimal] = None
     status: str = "open"
     is_live: bool = False
+    ticket_type: str = "solo"  # "solo" | "aku" from Tipsport first line (AKU / SÓLO)
 
 
 class OcrResponse(BaseModel):
     tickets: List[OcrParsedTicket] = []
     raw_text: str = ""
     confidence: Optional[float] = None
+
+
+# ─── Tipsport Scraper Import ───────────────────────────────
+
+class TipsportScrapeTicketIn(BaseModel):
+    """
+    Vstup pro import z browser scrapperu (Tipsport).
+    Drží „syrové“ hodnoty přímo z HTML, backend je namapuje na TicketCreate.
+    """
+    home_team: str
+    away_team: str
+    tipsport_key: Optional[str] = None         # stabilní identifikátor z data-atid / href (idu:idb:hash)
+    sport_label: Optional[str] = None          # např. „Basketbal“, „Fotbal“
+    sport_icon_id: Optional[str] = None        # např. "#i173" z <use xlink:href>
+    sport_class: Optional[str] = None          # fallback: CSS class z Tipsportu (např. "kVnpal")
+    market_label_raw: Optional[str] = None     # např. „Vítěz zápasu“
+    selection_raw: Optional[str] = None        # např. „Vítěz zápasu: Team Voca“
+    ticket_type_raw: Optional[str] = None      # např. „AKU“ / „SÓLO“
+    status_raw: Optional[str] = None           # např. „won“ / „lost“ nebo text/ikona z Tipsportu
+    stake: Decimal
+    payout: Optional[Decimal] = None
+    odds: Optional[Decimal] = None
+    placed_at: Optional[datetime] = None       # datum/čas podaní tiketu, pokud ho scrapper umí vytáhnout
+
+
+class TipsportScrapeRequest(BaseModel):
+    tickets: List[TipsportScrapeTicketIn]
+
+
+class TipsportScrapeResultItem(BaseModel):
+    index: int
+    status: str                 # "created" | "updated" | "skipped" | "error"
+    ticket_id: Optional[int] = None
+    message: Optional[str] = None
+
+
+class TipsportScrapeResponse(BaseModel):
+    created: int
+    updated: int
+    skipped: int
+    errors: int
+    results: List[TipsportScrapeResultItem]
+
+
+# ─── Betano Scraper Import ──────────────────────────────────
+
+
+class BetanoScrapeTicketIn(BaseModel):
+    """
+    Vstup pro import z browser scrapperu (Betano).
+    Struktura podobná TipsportScrapeTicketIn, ale s betano_key.
+    """
+
+    home_team: str
+    away_team: str
+    betano_key: Optional[str] = None            # stabilní Bet ID z Betano (např. 2059418245)
+    sport_label: Optional[str] = None           # např. „Hokej“, „Basketbal“
+    sport_icon_id: Optional[str] = None         # např. cesta k ikoně /img/ICEH....
+    market_label_raw: Optional[str] = None      # např. „Počet gólů“, „Vítěz“
+    selection_raw: Optional[str] = None         # např. „Méně než 5.5“
+    ticket_type_raw: Optional[str] = None       # např. „SOLO sázka“, „2kombinace“
+    status_raw: Optional[str] = None            # např. „Výhry“, „Prohry“, „Cash out“
+    stake: Decimal
+    payout: Optional[Decimal] = None
+    odds: Optional[Decimal] = None
+    placed_at: Optional[datetime] = None        # datum/čas podaní tiketu
+
+
+class BetanoScrapeRequest(BaseModel):
+    tickets: List[BetanoScrapeTicketIn]
+
+
+class BetanoScrapeResultItem(BaseModel):
+    index: int
+    status: str                 # "created" | "updated" | "skipped" | "error"
+    ticket_id: Optional[int] = None
+    message: Optional[str] = None
+
+
+class BetanoScrapeResponse(BaseModel):
+    created: int
+    updated: int
+    skipped: int
+    errors: int
+    results: List[BetanoScrapeResultItem]
+
+
+# ─── Analytics ─────────────────────────────────────────────
+
+class AnalyticsKpis(BaseModel):
+    """Souhrnné KPI pro zvolené období."""
+    tickets_count: int = 0
+    won_count: int = 0
+    lost_count: int = 0
+    void_count: int = 0
+    stake_total: Decimal = Decimal("0")
+    profit_total: Decimal = Decimal("0")
+    roi_percent: float = 0.0
+    hitrate_percent: float = 0.0
+
+
+class AnalyticsSportItem(BaseModel):
+    """Agregace podle sportu."""
+    sport_id: int
+    sport_name: str
+    tickets_count: int = 0
+    won_count: int = 0
+    lost_count: int = 0
+    void_count: int = 0
+    profit: Decimal = Decimal("0")
+    roi_percent: float = 0.0
+    hitrate_percent: float = 0.0
+
+
+class AnalyticsMarketItem(BaseModel):
+    """Agregace podle sportu + typu sázky (pro doporučení a grafy)."""
+    sport_id: int
+    sport_name: str
+    market_type_id: Optional[int] = None
+    market_type_name: str
+    tickets_count: int = 0
+    won_count: int = 0
+    lost_count: int = 0
+    void_count: int = 0
+    profit: Decimal = Decimal("0")
+    roi_percent: float = 0.0
+    hitrate_percent: float = 0.0
+
+
+class AnalyticsTrendPoint(BaseModel):
+    """Bod časové řady profitu."""
+    date: str
+    profit: Decimal = Decimal("0")
+    cumulative_profit: Decimal = Decimal("0")
+    bets_count: int = 0
+
+
+class AnalyticsSummary(BaseModel):
+    """Odpověď endpointu /api/analytics/summary."""
+    kpis: AnalyticsKpis
+    by_sport: List[AnalyticsSportItem] = []
+    by_market: List[AnalyticsMarketItem] = []
+    profit_trend: List[AnalyticsTrendPoint] = []

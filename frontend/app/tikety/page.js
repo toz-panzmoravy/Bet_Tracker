@@ -1,9 +1,52 @@
 "use client";
-import { useState, useEffect } from "react";
-import { getTickets, deleteTicket, updateTicket, getSports, getBookmakers } from "../lib/api";
+import { useState, useEffect, useRef } from "react";
+import { useSearchParams } from "next/navigation";
+import { getTickets, deleteTicket, updateTicket, getSports, getBookmakers, exportTicketsCsv } from "../lib/api";
+
+const TICKETS_PAGE_SIZE = 50;
+const FILTERS_STORAGE_KEY = "bettracker_tickets_filters";
+
+function paramsToState(searchParams) {
+    const filters = {};
+    const bookmaker_id = searchParams.get("bookmaker_id");
+    if (bookmaker_id) filters.bookmaker_id = bookmaker_id;
+    const sport_id = searchParams.get("sport_id");
+    if (sport_id) filters.sport_id = sport_id;
+    const status = searchParams.get("status");
+    if (status) filters.status = status;
+    const ticket_type = searchParams.get("ticket_type");
+    if (ticket_type) filters.ticket_type = ticket_type;
+    const is_live = searchParams.get("is_live");
+    if (is_live !== null && is_live !== "") filters.is_live = is_live === "true";
+    const date_from = searchParams.get("date_from");
+    if (date_from) filters.date_from = date_from;
+    const date_to = searchParams.get("date_to");
+    if (date_to) filters.date_to = date_to;
+    const market_type_id = searchParams.get("market_type_id");
+    if (market_type_id) filters.market_type_id = market_type_id;
+    const sort_by = searchParams.get("sort_by") || "created_at";
+    const sort_dir = searchParams.get("sort_dir") || "desc";
+    return { filters, sort_by: sort_by, sort_dir: sort_dir };
+}
+
+function stateToParams(filters, sortBy, sortDir) {
+    const p = new URLSearchParams();
+    if (filters.bookmaker_id) p.set("bookmaker_id", filters.bookmaker_id);
+    if (filters.sport_id) p.set("sport_id", filters.sport_id);
+    if (filters.status) p.set("status", filters.status);
+    if (filters.ticket_type) p.set("ticket_type", filters.ticket_type);
+    if (filters.is_live !== undefined && filters.is_live !== null) p.set("is_live", String(filters.is_live));
+    if (filters.date_from) p.set("date_from", filters.date_from);
+    if (filters.date_to) p.set("date_to", filters.date_to);
+    if (filters.market_type_id) p.set("market_type_id", filters.market_type_id);
+    if (sortBy && sortBy !== "created_at") p.set("sort_by", sortBy);
+    if (sortDir && sortDir !== "desc") p.set("sort_dir", sortDir);
+    return p;
+}
 import { useToast } from "../components/Toast";
 import { TicketsSkeleton } from "../components/Skeletons";
 import Confetti from "../components/Confetti";
+import ConfirmModal from "../components/ConfirmModal";
 
 const STATUS_MAP = {
     won: { label: "Výhra", class: "badge-won", icon: "✅" },
@@ -62,6 +105,17 @@ function EditTicketModal({ ticket, onClose, onSave, sports, bookmakers }) {
     const [form, setForm] = useState({ ...ticket });
     const [loading, setLoading] = useState(false);
 
+    useEffect(() => {
+        function handleKeyDown(e) {
+            if (e.key === "Escape") {
+                e.preventDefault();
+                onClose();
+            }
+        }
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, [onClose]);
+
     async function handleSubmit(e) {
         e.preventDefault();
         setLoading(true);
@@ -84,6 +138,20 @@ function EditTicketModal({ ticket, onClose, onSave, sports, bookmakers }) {
                 <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                         <div className="form-group">
+                            <label style={{ fontSize: "0.75rem", color: "#8b8fa3", display: "block", marginBottom: 4 }}>Sport</label>
+                            <select className="input" style={{ width: "100%" }} value={form.sport_id || ""} onChange={e => setForm({ ...form, sport_id: e.target.value })}>
+                                {sports.map(s => <option key={s.id} value={s.id}>{s.icon} {s.name}</option>)}
+                            </select>
+                        </div>
+                        <div className="form-group">
+                            <label style={{ fontSize: "0.75rem", color: "#8b8fa3", display: "block", marginBottom: 4 }}>Sázkovka</label>
+                            <select className="input" style={{ width: "100%" }} value={form.bookmaker_id || ""} onChange={e => setForm({ ...form, bookmaker_id: e.target.value })}>
+                                {bookmakers.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                            </select>
+                        </div>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                        <div className="form-group">
                             <label style={{ fontSize: "0.75rem", color: "#8b8fa3", display: "block", marginBottom: 4 }}>Domácí</label>
                             <input className="input" style={{ width: "100%" }} value={form.home_team || ""} onChange={e => setForm({ ...form, home_team: e.target.value })} />
                         </div>
@@ -92,18 +160,23 @@ function EditTicketModal({ ticket, onClose, onSave, sports, bookmakers }) {
                             <input className="input" style={{ width: "100%" }} value={form.away_team || ""} onChange={e => setForm({ ...form, away_team: e.target.value })} />
                         </div>
                     </div>
-
+                    <div className="form-group">
+                        <label style={{ fontSize: "0.75rem", color: "#8b8fa3", display: "block", marginBottom: 4 }}>Typ tiketu</label>
+                        <select className="input" style={{ width: "100%" }} value={form.ticket_type || "solo"} onChange={e => setForm({ ...form, ticket_type: e.target.value })}>
+                            <option value="solo">SÓLO (jedna sázka)</option>
+                            <option value="aku">AKU (akumulátor)</option>
+                        </select>
+                    </div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                         <div className="form-group">
-                            <label style={{ fontSize: "0.75rem", color: "#8b8fa3", display: "block", marginBottom: 4 }}>Typ sázky (např. 1X2)</label>
-                            <input className="input" style={{ width: "100%" }} value={form.market_label || form.market_type || ""} onChange={e => setForm({ ...form, market_label: e.target.value })} />
+                            <label style={{ fontSize: "0.75rem", color: "#8b8fa3", display: "block", marginBottom: 4 }}>Typ sázky</label>
+                            <input className="input" style={{ width: "100%" }} value={form.market_label || form.market_type || ""} onChange={e => setForm({ ...form, market_label: e.target.value })} placeholder="např. 1X2" />
                         </div>
                         <div className="form-group">
-                            <label style={{ fontSize: "0.75rem", color: "#8b8fa3", display: "block", marginBottom: 4 }}>Sázka / Výběr</label>
+                            <label style={{ fontSize: "0.75rem", color: "#8b8fa3", display: "block", marginBottom: 4 }}>Výběr</label>
                             <input className="input" style={{ width: "100%" }} value={form.selection || ""} onChange={e => setForm({ ...form, selection: e.target.value })} />
                         </div>
                     </div>
-
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
                         <div className="form-group">
                             <label style={{ fontSize: "0.75rem", color: "#8b8fa3", display: "block", marginBottom: 4 }}>Kurz</label>
@@ -118,15 +191,11 @@ function EditTicketModal({ ticket, onClose, onSave, sports, bookmakers }) {
                             <input type="number" className="input" style={{ width: "100%" }} value={form.payout || ""} onChange={e => setForm({ ...form, payout: e.target.value })} />
                         </div>
                         <div className="form-group">
-                            <label style={{ fontSize: "0.75rem", color: "#8b8fa3", display: "block", marginBottom: 4 }}>Sport</label>
-                            <select className="input" style={{ width: "100%" }} value={form.sport_id || ""} onChange={e => setForm({ ...form, sport_id: e.target.value })}>
-                                {sports.map(s => <option key={s.id} value={s.id}>{s.icon} {s.name}</option>)}
-                            </select>
-                        </div>
-                        <div className="form-group">
-                            <label style={{ fontSize: "0.75rem", color: "#8b8fa3", display: "block", marginBottom: 4 }}>Sázkovka</label>
-                            <select className="input" style={{ width: "100%" }} value={form.bookmaker_id || ""} onChange={e => setForm({ ...form, bookmaker_id: e.target.value })}>
-                                {bookmakers.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                            <label style={{ fontSize: "0.75rem", color: "#8b8fa3", display: "block", marginBottom: 4 }}>Stav</label>
+                            <select className="input" style={{ width: "100%" }} value={form.status || "open"} onChange={e => setForm({ ...form, status: e.target.value })}>
+                                {STATUS_OPTIONS.map(s => (
+                                    <option key={s} value={s}>{STATUS_MAP[s].icon} {STATUS_MAP[s].label}</option>
+                                ))}
                             </select>
                         </div>
                     </div>
@@ -143,37 +212,91 @@ function EditTicketModal({ ticket, onClose, onSave, sports, bookmakers }) {
 
 export default function TiketyPage() {
     const [tickets, setTickets] = useState([]);
+    const [totalCount, setTotalCount] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [hasMore, setHasMore] = useState(true);
+    const searchParams = useSearchParams();
     const [filters, setFilters] = useState({});
     const [sports, setSports] = useState([]);
     const [bookmakers, setBookmakers] = useState([]);
-    const [sortBy, setSortBy] = useState("created_at");
+    const [sortBy, setSortBy] = useState("event_date");
     const [sortDir, setSortDir] = useState("desc");
+    const filtersInitialized = useRef(false);
     const [showConfetti, setShowConfetti] = useState(false);
     const [editingTicket, setEditingTicket] = useState(null);
+    const [deleteConfirmId, setDeleteConfirmId] = useState(null);
     const toast = useToast();
 
     useEffect(() => {
         getSports().then(setSports).catch(() => { });
-        getBookmakers().then(list => {
-            const filtered = list.filter(b => ['Tipsport', 'Betano'].includes(b.name));
-            setBookmakers(filtered);
-        }).catch(() => { });
+        getBookmakers().then(setBookmakers).catch(() => { });
     }, []);
 
     useEffect(() => {
-        loadTickets();
+        if (filtersInitialized.current) return;
+        filtersInitialized.current = true;
+        const fromUrl = paramsToState(searchParams);
+        const hasUrlParams = searchParams.toString().length > 0;
+        if (hasUrlParams) {
+            setFilters(fromUrl.filters);
+            setSortBy(fromUrl.sort_by);
+            setSortDir(fromUrl.sort_dir);
+        } else {
+            try {
+                const stored = localStorage.getItem(FILTERS_STORAGE_KEY);
+                if (stored) {
+                    const { filters: f, sort_by: sb, sort_dir: sd } = JSON.parse(stored);
+                    if (f) setFilters(f);
+                    if (sb) setSortBy(sb);
+                    if (sd) setSortDir(sd);
+                }
+            } catch (_) { /* ignore */ }
+        }
+    }, [searchParams]);
+
+    useEffect(() => {
+        const params = stateToParams(filters, sortBy, sortDir);
+        if (params.toString()) {
+            window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
+        } else {
+            window.history.replaceState(null, "", window.location.pathname);
+        }
+        try {
+            localStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify({ filters, sort_by: sortBy, sort_dir: sortDir }));
+        } catch (_) { /* ignore */ }
     }, [filters, sortBy, sortDir]);
 
-    async function loadTickets() {
-        setLoading(true);
+    useEffect(() => {
+        loadTickets(false);
+    }, [filters, sortBy, sortDir]);
+
+    async function loadTickets(append = false) {
+        const offset = append ? tickets.length : 0;
+        if (!append) setLoading(true);
+        else setLoadingMore(true);
         try {
-            const data = await getTickets({ ...filters, sort_by: sortBy, sort_dir: sortDir });
-            setTickets(data);
+            const data = await getTickets({
+                ...filters,
+                sort_by: sortBy,
+                sort_dir: sortDir,
+                limit: TICKETS_PAGE_SIZE,
+                offset,
+            });
+            const items = data.items ?? data;
+            const total = data.total ?? items.length;
+            setTotalCount(total);
+            setHasMore(items.length >= TICKETS_PAGE_SIZE);
+            if (append) {
+                setTickets((prev) => [...prev, ...items]);
+            } else {
+                setTickets(items);
+            }
         } catch (e) {
             toast.error("Chyba načítání tiketů: " + e.message);
         } finally {
             setLoading(false);
+            setLoadingMore(false);
         }
     }
 
@@ -191,7 +314,14 @@ export default function TiketyPage() {
 
     async function handleStatusUpdate(id, newStatus) {
         try {
-            const updated = await updateTicket(id, { status: newStatus });
+            const payload = { status: newStatus };
+            const ticket = tickets.find((t) => t.id === id);
+            if (newStatus === "won" && ticket && (!ticket.payout || Number(ticket.payout) === 0)) {
+                const odds = Number(ticket.odds) || 0;
+                const stake = Number(ticket.stake) || 0;
+                if (odds && stake) payload.payout = odds * stake;
+            }
+            const updated = await updateTicket(id, payload);
             setTickets((prev) =>
                 prev.map((t) => (t.id === id ? { ...t, ...updated } : t))
             );
@@ -221,8 +351,14 @@ export default function TiketyPage() {
         }
     }
 
-    async function handleDelete(id) {
-        if (!confirm("Opravdu smazat tento tiket?")) return;
+    function handleDeleteClick(id) {
+        setDeleteConfirmId(id);
+    }
+
+    async function confirmDelete() {
+        const id = deleteConfirmId;
+        setDeleteConfirmId(null);
+        if (id == null) return;
         try {
             await deleteTicket(id);
             setTickets((prev) => prev.filter((t) => t.id !== id));
@@ -253,20 +389,42 @@ export default function TiketyPage() {
         <div>
             <Confetti active={showConfetti} onDone={() => setShowConfetti(false)} />
 
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem", flexWrap: "wrap", gap: 12 }}>
                 <div>
                     <h1 style={{ fontSize: "1.5rem", fontWeight: 700 }}>🎫 Tikety</h1>
                     <p style={{ fontSize: "0.85rem", color: "var(--color-text-secondary)" }}>
-                        {tickets.length} tiketů • Vklad: {totalStake.toLocaleString("cs-CZ")} Kč •
+                        {totalCount != null ? `Zobrazeno ${tickets.length} z ${totalCount}` : `${tickets.length} tiketů`}
+                        {" • "}Vklad: {totalStake.toLocaleString("cs-CZ")} Kč •
                         Profit: <span style={{ color: totalProfit >= 0 ? "var(--color-green)" : "var(--color-red)" }}>
                             {totalProfit.toLocaleString("cs-CZ")} Kč
                         </span>
                     </p>
                 </div>
+                <button
+                    type="button"
+                    className="btn btn-ghost"
+                    onClick={async () => {
+                        try {
+                            await exportTicketsCsv({ ...filters, sort_by: sortBy, sort_dir: sortDir });
+                            toast.success("Export CSV stažen");
+                        } catch (e) {
+                            toast.error("Export selhal: " + e.message);
+                        }
+                    }}
+                >
+                    📥 Export CSV
+                </button>
             </div>
 
             {/* Filters */}
             <div className="glass-card" style={{ padding: "1rem 1.25rem", marginBottom: "1.5rem", display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+                <select className="input" style={{ width: 150 }}
+                    value={filters.bookmaker_id || ""}
+                    onChange={(e) => setFilters({ ...filters, bookmaker_id: e.target.value || undefined })}
+                >
+                    <option value="">Všechny sázkovky</option>
+                    {bookmakers.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                </select>
                 <select className="input" style={{ width: 150 }}
                     value={filters.sport_id || ""}
                     onChange={(e) => setFilters({ ...filters, sport_id: e.target.value || undefined })}
@@ -283,6 +441,14 @@ export default function TiketyPage() {
                     <option value="lost">❌ Prohra</option>
                     <option value="open">⏳ Čeká</option>
                     <option value="void">↩️ Vráceno</option>
+                </select>
+                <select className="input" style={{ width: 120 }}
+                    value={filters.ticket_type || ""}
+                    onChange={(e) => setFilters({ ...filters, ticket_type: e.target.value || undefined })}
+                >
+                    <option value="">Typ: vše</option>
+                    <option value="solo">SÓLO</option>
+                    <option value="aku">AKU</option>
                 </select>
                 <select className="input" style={{ width: 140 }}
                     value={filters.is_live ?? ""}
@@ -306,7 +472,7 @@ export default function TiketyPage() {
             </div>
 
             {/* Table */}
-            <div className="glass-card" style={{ overflow: "auto" }}>
+            <div className="glass-card tickets-table-wrapper" style={{ overflow: "auto" }}>
                 {loading ? (
                     <div style={{ padding: "1.25rem" }}>
                         <TicketsSkeleton />
@@ -321,8 +487,8 @@ export default function TiketyPage() {
                     <table className="data-table">
                         <thead>
                             <tr>
-                                <th onClick={() => handleSort("created_at")} style={{ cursor: "pointer" }}>
-                                    Datum <SortIndicator col="created_at" />
+                                <th onClick={() => handleSort("event_date")} style={{ cursor: "pointer" }}>
+                                    Datum <SortIndicator col="event_date" />
                                 </th>
                                 <th>Sázkovka</th>
                                 <th>Sport</th>
@@ -346,9 +512,11 @@ export default function TiketyPage() {
                         <tbody>
                             {tickets.map((t) => {
                                 const profit = Number(t.profit || 0);
+                                const isChild = t.parent_id != null;
                                 return (
-                                    <tr key={t.id}>
-                                        <td style={{ whiteSpace: "nowrap" }}>
+                                    <tr key={t.id} style={isChild ? { background: "var(--color-bg-card)" } : undefined}>
+                                        <td style={{ whiteSpace: "nowrap", paddingLeft: isChild ? 28 : undefined }}>
+                                            {isChild && <span style={{ marginRight: 6, color: "var(--color-text-muted)" }}>↳</span>}
                                             {t.created_at ? new Date(t.created_at).toLocaleDateString("cs-CZ") : "–"}
                                         </td>
                                         <td>
@@ -357,14 +525,14 @@ export default function TiketyPage() {
                                                     fontSize: "0.75rem",
                                                     padding: "2px 6px",
                                                     borderRadius: "4px",
-                                                    border: `1.5px solid ${t.bookmaker.name === 'Tipsport' ? '#3498db' : '#ff7000'}`,
-                                                    color: t.bookmaker.name === 'Tipsport' ? '#3498db' : '#ff7000',
+                                                    border: `1.5px solid ${t.bookmaker.name === 'Tipsport' ? '#3498db' : t.bookmaker.name === 'Betano' ? '#ff7000' : 'var(--color-border-hover)'}`,
+                                                    color: t.bookmaker.name === 'Tipsport' ? '#3498db' : t.bookmaker.name === 'Betano' ? '#ff7000' : 'var(--color-text-secondary)',
                                                     fontWeight: 800,
                                                     display: "inline-block",
                                                     minWidth: "20px",
                                                     textAlign: "center"
                                                 }} title={t.bookmaker.name}>
-                                                    {t.bookmaker.name === 'Tipsport' ? 'T' : 'B'}
+                                                    {(t.bookmaker.name || "?")[0]}
                                                 </span>
                                             ) : null}
                                         </td>
@@ -372,9 +540,21 @@ export default function TiketyPage() {
                                             <div style={{ display: "flex", alignItems: "center", gap: 8, whiteSpace: "nowrap" }}>
                                                 <span style={{ fontSize: "1.1rem" }}>{t.sport?.icon}</span>
                                                 <span>{t.sport?.name || "–"}</span>
+                                                {(t.ticket_type === "aku" || t.ticket_type === "solo") && (
+                                                    <span style={{
+                                                        fontSize: "0.65rem",
+                                                        padding: "2px 5px",
+                                                        borderRadius: 4,
+                                                        background: t.ticket_type === "aku" ? "var(--color-accent-soft)" : "rgba(255,255,255,0.06)",
+                                                        color: t.ticket_type === "aku" ? "var(--color-accent)" : "var(--color-text-muted)",
+                                                        fontWeight: 600,
+                                                    }}>
+                                                        {t.ticket_type === "aku" ? "AKU" : "SÓLO"}
+                                                    </span>
+                                                )}
                                             </div>
                                         </td>
-                                        <td style={{ fontWeight: 500 }}>
+                                        <td style={{ fontWeight: 500, paddingLeft: isChild ? 20 : undefined }}>
                                             {t.home_team} – {t.away_team}
                                             {t.is_live && <span style={{ marginLeft: 6, fontSize: "0.7rem", background: "var(--color-red-soft)", color: "var(--color-red)", padding: "2px 6px", borderRadius: 6 }}>LIVE</span>}
                                         </td>
@@ -399,7 +579,7 @@ export default function TiketyPage() {
                                                 <button
                                                     className="btn btn-danger"
                                                     style={{ padding: "4px 8px", fontSize: "0.8rem" }}
-                                                    onClick={() => handleDelete(t.id)}
+                                                    onClick={() => handleDeleteClick(t.id)}
                                                 >🗑</button>
                                             </div>
                                         </td>
@@ -411,6 +591,19 @@ export default function TiketyPage() {
                 )}
             </div>
 
+            {!loading && tickets.length > 0 && hasMore && (
+                <div style={{ display: "flex", justifyContent: "center", marginTop: 16 }}>
+                    <button
+                        className="btn btn-ghost"
+                        onClick={() => loadTickets(true)}
+                        disabled={loadingMore}
+                        style={{ padding: "10px 24px" }}
+                    >
+                        {loadingMore ? "Načítám…" : "Načíst další"}
+                    </button>
+                </div>
+            )}
+
             {editingTicket && (
                 <EditTicketModal
                     ticket={editingTicket}
@@ -420,6 +613,17 @@ export default function TiketyPage() {
                     onSave={handleUpdateTicket}
                 />
             )}
+
+            <ConfirmModal
+                open={deleteConfirmId != null}
+                title="Smazat tiket?"
+                message="Tato akce je nevratná."
+                confirmLabel="Smazat"
+                cancelLabel="Zrušit"
+                variant="danger"
+                onConfirm={confirmDelete}
+                onCancel={() => setDeleteConfirmId(null)}
+            />
         </div>
     );
 }

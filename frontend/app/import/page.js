@@ -1,11 +1,13 @@
 "use client";
 import { useState, useEffect, useCallback, useRef } from "react";
-import { ocrParseBase64, createTicket, getSports, getLeagues, getBookmakers, getMarketTypes, getTopMarketTypes, createMarketType, checkOcrHealth } from "../lib/api";
+import { ocrParseBase64, createTicket, getSports, getLeagues, getBookmakers, getMarketTypes, getTopMarketTypes, findOrCreateMarketType, checkOcrHealth } from "../lib/api";
+import { useToast } from "../components/Toast";
 
 const EMPTY_TICKET = {
     home_team: "", away_team: "", sport: "", league: "",
     market_label: "", selection: "", odds: "", stake: "",
-    payout: "", status: "open", is_live: false, bookmaker_id: null
+    payout: "", status: "open", is_live: false, bookmaker_id: null,
+    ticket_type: "solo",
 };
 
 export default function ImportPage() {
@@ -26,6 +28,7 @@ export default function ImportPage() {
 
     const [ocrBookmaker, setOcrBookmaker] = useState("tipsport");
     const ocrBookmakerRef = useRef("tipsport");
+    const ocrAbortRef = useRef(null);
 
     const handleBookmakerChange = (val) => {
         setOcrBookmaker(val);
@@ -93,6 +96,7 @@ export default function ImportPage() {
     }
 
     function processImage(file) {
+        ocrAbortRef.current = new AbortController();
         const reader = new FileReader();
         reader.onload = async (e) => {
             let dataUrl = e.target.result;
@@ -110,8 +114,32 @@ export default function ImportPage() {
                 setImagePreview(dataUrl);
                 setImage(dataUrl);
 
-                const result = await ocrParseBase64(dataUrl, ocrBookmakerRef.current);
-                setParsedTickets(result.tickets || []);
+                const result = await ocrParseBase64(dataUrl, ocrBookmakerRef.current, ocrAbortRef.current?.signal);
+                const selectedProfile = ocrBookmakerRef.current?.toLowerCase() || "tipsport";
+                const mapped = (result.tickets || []).map(t => ({
+                    ...t,
+                    ticket_type: t.ticket_type || "solo",
+                    bookmaker_id: t.bookmaker_id || (bookmakers.find(b => b.name.toLowerCase() === selectedProfile)?.id ?? null),
+                }));
+                // AKU: jeden nadřazený tiket + 2 prázdné subtikety k ručnímu doplnění
+                const expanded = [];
+                for (const t of mapped) {
+                    if (t.ticket_type === "aku") {
+                        const akuKey = `aku_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+                        expanded.push({ ...t, _isAkuParent: true, _akuKey: akuKey });
+                        const currentBook = bookmakers.find(b => b.name.toLowerCase() === selectedProfile);
+                        for (let k = 0; k < 2; k++) {
+                            expanded.push({
+                                ...EMPTY_TICKET,
+                                bookmaker_id: currentBook?.id ?? t.bookmaker_id,
+                                _akuParentKey: akuKey,
+                            });
+                        }
+                    } else {
+                        expanded.push(t);
+                    }
+                }
+                setParsedTickets(expanded);
                 setRawText(result.raw_text || "");
                 if (!result.tickets || result.tickets.length === 0) {
                     let msg = "";
@@ -126,7 +154,11 @@ export default function ImportPage() {
                     setShowManual(true);
                 }
             } catch (err) {
-                setOcrError("Chyba OCR: " + err.message);
+                if (err.name === "AbortError") {
+                    setOcrError("Rozpoznávání zrušeno.");
+                } else {
+                    setOcrError("Chyba OCR: " + err.message);
+                }
                 setShowManual(true);
             } finally {
                 setLoading(false);
@@ -154,61 +186,187 @@ export default function ImportPage() {
     }
 
     function removeTicket(index) {
-        setParsedTickets(parsedTickets.filter((_, i) => i !== index));
+        const t = parsedTickets[index];
+        if (t._isAkuParent && t._akuKey) {
+            setParsedTickets(parsedTickets.filter((item, i) => item._akuParentKey !== t._akuKey && !(item._isAkuParent && item._akuKey === t._akuKey)));
+        } else if (t._akuParentKey) {
+            setParsedTickets(parsedTickets.filter((_, i) => i !== index));
+        } else {
+            setParsedTickets(parsedTickets.filter((_, i) => i !== index));
+        }
+        setValidationErrors({});
+    }
+
+    function validateTicket(t) {
+        const errors = [];
+        const sportVal = (t.sport || "").toString().trim();
+        if (!sportVal) errors.push("chybí sport");
+        const stakeNum = parseFloat(t.stake);
+        if (isNaN(stakeNum) || stakeNum <= 0) errors.push("vklad musí být kladné číslo");
+        const oddsNum = parseFloat(t.odds);
+        if (isNaN(oddsNum) || oddsNum <= 0) errors.push("kurz musí být kladné číslo");
+        return { valid: errors.length === 0, errors };
+    }
+
+    function validateTicketAkuParent(t) {
+        const errors = [];
+        const stakeNum = parseFloat(t.stake);
+        if (isNaN(stakeNum) || stakeNum <= 0) errors.push("vklad musí být kladné číslo");
+        const oddsNum = parseFloat(t.odds);
+        if (isNaN(oddsNum) || oddsNum <= 0) errors.push("kurz musí být kladné číslo");
+        return { valid: errors.length === 0, errors };
+    }
+
+    function validateAll() {
+        const validIndices = [];
+        const invalid = [];
+        for (let i = 0; i < parsedTickets.length; i++) {
+            const t = parsedTickets[i];
+            if (t._akuParentKey) continue;
+            if (t._isAkuParent && t._akuKey) {
+                const childIndices = parsedTickets.map((item, idx) => idx).filter(idx => parsedTickets[idx]._akuParentKey === t._akuKey);
+                const parentResult = validateTicketAkuParent(t);
+                const childResults = childIndices.map(ci => ({ idx: ci, ...validateTicket(parsedTickets[ci]) }));
+                const allChildrenValid = childResults.every(r => r.valid);
+                if (parentResult.valid && allChildrenValid) {
+                    validIndices.push(i);
+                } else {
+                    if (!parentResult.valid) invalid.push({ index: i, errors: parentResult.errors });
+                    childResults.forEach(r => { if (!r.valid) invalid.push({ index: r.idx, errors: r.errors }); });
+                }
+            } else {
+                const { valid, errors } = validateTicket(t);
+                if (valid) validIndices.push(i);
+                else invalid.push({ index: i, errors });
+            }
+        }
+        return { validIndices, invalid };
+    }
+
+    const [validationErrors, setValidationErrors] = useState({});
+    const toast = useToast();
+
+    async function createOneTicket(t, opts = {}) {
+        const sport = sports.find(s => s.name.toLowerCase() === (t.sport || "").toLowerCase());
+        const league = leagues.find(l => l.name.toLowerCase() === (t.league || "").toLowerCase());
+        let bookmakerId = t.bookmaker_id;
+        if (!bookmakerId) {
+            const ocrBook = bookmakers.find(b => b.name.toLowerCase() === ocrBookmakerRef.current.toLowerCase());
+            bookmakerId = ocrBook?.id || bookmakers[0]?.id || 1;
+        }
+        let marketTypeId = null;
+        const normLabel = (s) => (s || "").trim().toLowerCase().replace(/,/g, ".");
+        if (t.market_label) {
+            const existing = allMarketTypes.find(mt => normLabel(mt.name) === normLabel(t.market_label));
+            if (existing) marketTypeId = existing.id;
+            else {
+                const newMt = await findOrCreateMarketType({ name: (t.market_label || "").trim(), sport_ids: sport ? [sport.id] : [] });
+                marketTypeId = newMt.id;
+                setAllMarketTypes(prev => (prev.some(m => m.id === newMt.id) ? prev : [...prev, newMt]));
+            }
+        }
+        return createTicket({
+            bookmaker_id: bookmakerId,
+            sport_id: opts.sport_id ?? sport?.id ?? 1,
+            league_id: league?.id || null,
+            market_type_id: marketTypeId,
+            parent_id: opts.parent_id ?? null,
+            home_team: opts.home_team ?? (t.home_team || "Neznámý"),
+            away_team: opts.away_team ?? (t.away_team || "Neznámý"),
+            market_label: t.market_label || null,
+            selection: t.selection || null,
+            odds: parseFloat(t.odds) || 1.0,
+            stake: parseFloat(t.stake) || 0,
+            payout: parseFloat(t.payout) || 0,
+            status: t.status || "open",
+            ticket_type: opts.ticket_type ?? (t.ticket_type || "solo"),
+            is_live: t.is_live || false,
+            source: image ? "ocr" : "manual",
+        });
     }
 
     async function saveAll() {
+        setValidationErrors({});
+        const { validIndices, invalid } = validateAll();
+        const errorMap = {};
+        invalid.forEach(({ index, errors }) => { errorMap[index] = errors; });
+        setValidationErrors(errorMap);
+
         setSaving(true);
+        let savedCount = 0;
+        const apiErrors = [];
+
         try {
-            for (const t of parsedTickets) {
-                const sport = sports.find(s => s.name.toLowerCase() === (t.sport || "").toLowerCase());
-                const league = leagues.find(l => l.name.toLowerCase() === (t.league || "").toLowerCase());
+            for (let i = 0; i < parsedTickets.length; i++) {
+                if (parsedTickets[i]._akuParentKey) continue;
+                if (!validIndices.includes(i)) continue;
+                const t = parsedTickets[i];
 
-                // Get bookmaker from ticket data (manual) or fall back to OCR selection
-                let bookmakerId = t.bookmaker_id;
-                if (!bookmakerId) {
-                    const ocrBook = bookmakers.find(b => b.name.toLowerCase() === ocrBookmakerRef.current.toLowerCase());
-                    bookmakerId = ocrBook?.id || bookmakers[0]?.id || 1;
-                }
-
-                // Vyhledat nebo vytvořit MarketType podle market_label
-                let marketTypeId = null;
-                if (t.market_label) {
-                    const existing = allMarketTypes.find(mt => mt.name.toLowerCase() === t.market_label.toLowerCase());
-                    if (existing) {
-                        marketTypeId = existing.id;
-                    } else {
-                        // Vytvořit nový pokud neexistuje
-                        const newMt = await createMarketType({
-                            name: t.market_label,
-                            sport_ids: sport ? [sport.id] : []
+                if (t._isAkuParent && t._akuKey) {
+                    const childIndices = parsedTickets.map((_, idx) => idx).filter(idx => parsedTickets[idx]._akuParentKey === t._akuKey);
+                    try {
+                        const firstChild = parsedTickets[childIndices[0]];
+                        const sportId = (firstChild && sports.find(s => s.name.toLowerCase() === (firstChild.sport || "").toLowerCase()))?.id || 1;
+                        const parent = await createTicket({
+                            bookmaker_id: t.bookmaker_id || bookmakers.find(b => b.name.toLowerCase() === ocrBookmakerRef.current?.toLowerCase())?.id || bookmakers[0]?.id,
+                            sport_id: sportId,
+                            league_id: null,
+                            market_type_id: null,
+                            parent_id: null,
+                            home_team: "AKU",
+                            away_team: "AKU sázka",
+                            market_label: null,
+                            selection: null,
+                            odds: parseFloat(t.odds) || 1.0,
+                            stake: parseFloat(t.stake) || 0,
+                            payout: parseFloat(t.payout) || 0,
+                            status: t.status || "open",
+                            ticket_type: "aku",
+                            is_live: false,
+                            source: image ? "ocr" : "manual",
                         });
-                        marketTypeId = newMt.id;
-                        // Aktualizovat lokální seznam
-                        setAllMarketTypes(prev => [...prev, newMt]);
+                        savedCount++;
+                        for (const ci of childIndices) {
+                            const child = parsedTickets[ci];
+                            await createOneTicket(child, { parent_id: parent.id, ticket_type: "solo" });
+                            savedCount++;
+                        }
+                    } catch (e) {
+                        apiErrors.push({ index: i, message: e.message });
+                        childIndices.forEach(ci => apiErrors.push({ index: ci, message: e.message }));
                     }
+                    continue;
                 }
 
-                await createTicket({
-                    bookmaker_id: bookmakerId,
-                    sport_id: sport?.id || 1,
-                    league_id: league?.id || null,
-                    market_type_id: marketTypeId,
-                    home_team: t.home_team || "Neznámý",
-                    away_team: t.away_team || "Neznámý",
-                    market_label: t.market_label || null, // Zachováme textový label pro jistotu
-                    selection: t.selection || null,
-                    odds: parseFloat(t.odds) || 1.0,
-                    stake: parseFloat(t.stake) || 0,
-                    payout: parseFloat(t.payout) || 0,
-                    status: t.status || "open",
-                    is_live: t.is_live || false,
-                    source: image ? "ocr" : "manual",
+                try {
+                    await createOneTicket(t);
+                    savedCount++;
+                } catch (e) {
+                    apiErrors.push({ index: i, message: e.message });
+                }
+            }
+
+            const totalInvalid = invalid.length + apiErrors.length;
+            if (apiErrors.length > 0) {
+                setValidationErrors((prev) => {
+                    const next = { ...prev };
+                    apiErrors.forEach(({ index, message }) => {
+                        next[index] = [...(next[index] || []), `API: ${message}`];
+                    });
+                    return next;
                 });
             }
-            setSaved(true);
-        } catch (e) {
-            alert("Chyba při ukládání: " + e.message);
+
+            if (totalInvalid === 0 && apiErrors.length === 0) {
+                setSaved(true);
+                toast.success("Všechny tikety byly uloženy.");
+            } else if (savedCount > 0) {
+                setSaved(true);
+                toast.success(`Uloženo ${savedCount} tiketů.`);
+                if (totalInvalid > 0) toast.error(`Počet chyb: ${totalInvalid}. Zkontrolujte zvýrazněné řádky.`);
+            } else {
+                toast.error(`Žádný tiket nebyl uložen. Opravte chyby (sport, vklad, kurz) a zkuste znovu.`);
+            }
         } finally {
             setSaving(false);
         }
@@ -290,10 +448,10 @@ export default function ImportPage() {
                 </label>
             </div>
 
-            {/* Pokud ještě není obrázek a nejsou manuální tikety */}
+            {/* Prázdný stav – žádný obrázek, žádné tikety */}
             {!image && parsedTickets.length === 0 ? (
                 <div
-                    className="paste-zone"
+                    className="paste-zone glass-card"
                     onDrop={handleDrop}
                     onDragOver={(e) => e.preventDefault()}
                     onClick={() => {
@@ -303,17 +461,23 @@ export default function ImportPage() {
                         input.onchange = (e) => e.target.files[0] && processImage(e.target.files[0]);
                         input.click();
                     }}
+                    style={{
+                        textAlign: "center",
+                        padding: "3rem 2rem",
+                        cursor: "pointer",
+                        border: "2px dashed var(--color-border)",
+                    }}
                 >
-                    <div style={{ fontSize: "3rem", marginBottom: 16 }}>📋</div>
-                    <p style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: 8 }}>
-                        Stiskni Ctrl+V pro vložení screenshotu
+                    <p style={{ fontSize: "2.5rem", marginBottom: 8, opacity: 0.4 }}>📸</p>
+                    <p style={{ fontSize: "0.85rem", color: "var(--color-text-primary)", marginBottom: 4 }}>
+                        Vlož screenshot (Ctrl+V) nebo přetáhni obrázek
                     </p>
-                    <p style={{ color: "var(--color-text-muted)", fontSize: "0.85rem" }}>
-                        nebo klikni / přetáhni obrázek sem
+                    <p style={{ fontSize: "0.7rem", color: "var(--color-text-muted)", marginTop: 4 }}>
+                        Klikni sem nebo vlož obrázek ze schránky
                     </p>
                 </div>
             ) : (
-                <div style={{ display: "grid", gridTemplateColumns: image ? "1fr 1fr" : "1fr", gap: 16 }}>
+                <div className="import-grid" style={{ display: "grid", gridTemplateColumns: image ? "1fr 1fr" : "1fr", gap: 16 }}>
                     {/* Image preview */}
                     {image && (
                         <div className="glass-card" style={{ padding: "1.25rem" }}>
@@ -379,11 +543,19 @@ export default function ImportPage() {
                             <div style={{ textAlign: "center", padding: "3rem" }}>
                                 <div className="spinner" style={{ width: 32, height: 32 }} />
                                 <p style={{ marginTop: 12, color: "var(--color-text-secondary)" }}>
-                                    Zpracovávám screenshot přes AI...
+                                    Rozpoznávám tiket… (může trvat 10–30 s)
                                 </p>
                                 <p style={{ marginTop: 4, color: "var(--color-text-muted)", fontSize: "0.75rem" }}>
-                                    První spuštění může trvat 1-3 minuty
+                                    První spuštění může trvat 1–3 minuty
                                 </p>
+                                <button
+                                    type="button"
+                                    className="btn btn-ghost"
+                                    style={{ marginTop: 16, padding: "8px 16px", fontSize: "0.85rem" }}
+                                    onClick={() => ocrAbortRef.current?.abort()}
+                                >
+                                    Zrušit OCR
+                                </button>
                             </div>
                         ) : parsedTickets.length === 0 ? (
                             <div style={{ padding: "2rem", textAlign: "center" }}>
@@ -399,18 +571,116 @@ export default function ImportPage() {
                             </div>
                         ) : (
                             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                                {parsedTickets.map((t, i) => (
-                                    <TicketForm key={i} ticket={t} index={i} sports={sports}
-                                        allMarketTypes={allMarketTypes}
-                                        topMarketTypes={topMarketTypes}
-                                        bookmakers={bookmakers}
-                                        onUpdate={updateTicket} onRemove={removeTicket} />
-                                ))}
+                                {parsedTickets.map((t, i) => {
+                                    if (t._akuParentKey) return null;
+                                    if (t._isAkuParent && t._akuKey) {
+                                        const childIndices = parsedTickets.map((_, idx) => idx).filter(idx => parsedTickets[idx]._akuParentKey === t._akuKey);
+                                        return (
+                                            <AkuGroup
+                                                key={t._akuKey}
+                                                parentTicket={t}
+                                                parentIndex={i}
+                                                childIndices={childIndices}
+                                                parsedTickets={parsedTickets}
+                                                sports={sports}
+                                                allMarketTypes={allMarketTypes}
+                                                topMarketTypes={topMarketTypes}
+                                                bookmakers={bookmakers}
+                                                ocrBookmaker={ocrBookmaker}
+                                                validationErrors={validationErrors}
+                                                onUpdate={updateTicket}
+                                                onRemove={removeTicket}
+                                            />
+                                        );
+                                    }
+                                    return (
+                                        <TicketForm key={i} ticket={t} index={i} sports={sports}
+                                            allMarketTypes={allMarketTypes}
+                                            topMarketTypes={topMarketTypes}
+                                            bookmakers={bookmakers}
+                                            ocrBookmaker={ocrBookmaker}
+                                            errors={validationErrors[i]}
+                                            onUpdate={updateTicket} onRemove={removeTicket} />
+                                    );
+                                })}
                             </div>
                         )}
                     </div>
                 </div>
             )}
+        </div>
+    );
+}
+
+function AkuGroup({ parentTicket, parentIndex, childIndices, parsedTickets, sports, allMarketTypes, topMarketTypes, bookmakers, ocrBookmaker, validationErrors, onUpdate, onRemove }) {
+    return (
+        <div style={{
+            border: "2px solid var(--color-accent)",
+            borderRadius: 14,
+            padding: "1rem",
+            background: "var(--color-bg-card)",
+        }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
+                <span style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--color-accent)" }}>
+                    🎫 AKU tiket (nadřazený)
+                </span>
+                <button type="button" style={{ background: "none", border: "none", color: "var(--color-text-muted)", cursor: "pointer", fontSize: "1rem" }} onClick={() => onRemove(parentIndex)} title="Odstranit celý AKU tiket">✕</button>
+            </div>
+            <p style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", marginBottom: 12 }}>
+                Systém rozpoznal AKU – níže doplňte každý zápas (subtiket) ručně.
+            </p>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8, marginBottom: 16, alignItems: "end" }}>
+                <div>
+                    <label style={{ color: "var(--color-text-muted)", fontSize: "0.7rem" }}>Vklad</label>
+                    <input type="number" className="input" style={{ padding: "6px 10px", fontSize: "0.8rem" }}
+                        value={parentTicket.stake || ""} onChange={(e) => onUpdate(parentIndex, "stake", e.target.value)} placeholder="50" />
+                </div>
+                <div>
+                    <label style={{ color: "var(--color-text-muted)", fontSize: "0.7rem" }}>Kurz</label>
+                    <input type="number" step="0.01" className="input" style={{ padding: "6px 10px", fontSize: "0.8rem" }}
+                        value={parentTicket.odds || ""} onChange={(e) => onUpdate(parentIndex, "odds", e.target.value)} placeholder="2.50" />
+                </div>
+                <div>
+                    <label style={{ color: "var(--color-text-muted)", fontSize: "0.7rem" }}>Výhra</label>
+                    <input type="number" className="input" style={{ padding: "6px 10px", fontSize: "0.8rem" }}
+                        value={parentTicket.payout || ""} onChange={(e) => onUpdate(parentIndex, "payout", e.target.value)} placeholder="0" />
+                </div>
+                <div>
+                    <label style={{ color: "var(--color-text-muted)", fontSize: "0.7rem" }}>Stav</label>
+                    <select className="input" style={{ padding: "6px 10px", fontSize: "0.8rem" }}
+                        value={parentTicket.status || "open"} onChange={(e) => onUpdate(parentIndex, "status", e.target.value)}>
+                        <option value="won">✅ Výhra</option>
+                        <option value="lost">❌ Prohra</option>
+                        <option value="open">⏳ Čeká</option>
+                        <option value="void">↩️ Vráceno</option>
+                    </select>
+                </div>
+            </div>
+            {validationErrors[parentIndex]?.length > 0 && (
+                <div style={{ marginBottom: 12, padding: "6px 10px", background: "var(--color-red-soft)", borderRadius: 8, fontSize: "0.75rem", color: "var(--color-red)" }}>
+                    {validationErrors[parentIndex].join(" • ")}
+                </div>
+            )}
+            <div style={{ fontSize: "0.8rem", fontWeight: 600, marginBottom: 8, color: "var(--color-text-secondary)" }}>Subtikety (doplňte ručně):</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {childIndices.map((ci, subIdx) => (
+                    <div key={ci} style={{ paddingLeft: 12, borderLeft: "3px solid var(--color-border)" }}>
+                        <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", marginBottom: 6 }}>Subtiket #{subIdx + 1}</div>
+                        <TicketForm
+                            ticket={parsedTickets[ci]}
+                            index={ci}
+                            sports={sports}
+                            allMarketTypes={allMarketTypes}
+                            topMarketTypes={topMarketTypes}
+                            bookmakers={bookmakers}
+                            ocrBookmaker={ocrBookmaker}
+                            errors={validationErrors[ci]}
+                            onUpdate={onUpdate}
+                            onRemove={onRemove}
+                        />
+                    </div>
+                ))}
+            </div>
         </div>
     );
 }
@@ -426,18 +696,24 @@ function MarketTypeSelect({ value, allMarketTypes, onUpdate, sportId }) {
 
     useEffect(() => setSearch(value || ""), [value]);
 
-    const filtered = allMarketTypes.filter(t => {
-        const matchesSearch = t.name.toLowerCase().includes(search.toLowerCase());
-        if (!sportId) return matchesSearch;
-
-        // Defensive check: if t.sports is missing, assume it belongs to all sports
+    const bySport = allMarketTypes.filter(t => {
+        if (!sportId) return true;
         const targetSportIds = t.sports ? t.sports.map(s => s.id) : [];
-        const isBelongingToSport = targetSportIds.length === 0 || targetSportIds.includes(sportId);
-
-        return matchesSearch && isBelongingToSport;
+        return targetSportIds.length === 0 || targetSportIds.includes(sportId);
     });
 
-    const displayList = search ? filtered : sportTopTypes;
+    const listForDisplay = bySport.length > 0 ? bySport : allMarketTypes;
+    const displayList = search
+        ? listForDisplay.filter(t =>
+            t.name.toLowerCase().includes((search || "").trim().toLowerCase())
+          )
+        : [...listForDisplay].sort((a, b) => {
+            const aTop = sportTopTypes.some(st => st.id === a.id);
+            const bTop = sportTopTypes.some(st => st.id === b.id);
+            if (aTop && !bTop) return -1;
+            if (!aTop && bTop) return 1;
+            return (a.name || "").localeCompare(b.name || "");
+          });
 
     return (
         <div style={{ position: "relative" }}>
@@ -473,7 +749,7 @@ function MarketTypeSelect({ value, allMarketTypes, onUpdate, sportId }) {
                 }}>
                     {!search && sportTopTypes.length > 0 && (
                         <div style={{ padding: "8px 12px", fontSize: "0.7rem", color: "var(--color-text-secondary)", background: "rgba(255,255,255,0.02)", borderRadius: "6px 6px 0 0", marginBottom: 2 }}>
-                            🔥 Časté pro tento sport
+                            🔥 Časté pro tento sport (nahoře), níže celý seznam typů
                         </div>
                     )}
 
@@ -551,23 +827,60 @@ function MarketTypeSelect({ value, allMarketTypes, onUpdate, sportId }) {
     );
 }
 
-function TicketForm({ ticket: t, index: i, sports, allMarketTypes, topMarketTypes, bookmakers, onUpdate, onRemove }) {
+function TicketForm({ ticket: t, index: i, sports, allMarketTypes, topMarketTypes, bookmakers, ocrBookmaker = "tipsport", errors = [], onUpdate, onRemove }) {
+    const defaultBookmakerId = bookmakers.find(b => b.name.toLowerCase() === (ocrBookmaker || "tipsport").toLowerCase())?.id;
+    const hasErrors = Array.isArray(errors) && errors.length > 0;
     return (
         <div style={{
             background: "var(--color-bg-input)",
             borderRadius: 12, padding: "1rem",
             border: "1px solid var(--color-border)",
+            borderLeft: hasErrors ? "3px solid var(--color-red)" : undefined,
         }}>
             {/* Header */}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>Tiket #{i + 1}</span>
+                <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+                    Tiket #{i + 1}
+                    {t.ticket_type === "aku" && (
+                        <span style={{ marginLeft: 8, padding: "2px 6px", borderRadius: 6, background: "var(--color-bg-card)", color: "var(--color-text-primary)", fontSize: "0.7rem", fontWeight: 600 }}>AKU</span>
+                    )}
+                </span>
                 <button
                     style={{ background: "none", border: "none", color: "var(--color-text-muted)", cursor: "pointer", fontSize: "1rem" }}
                     onClick={() => onRemove(i)}
                 >✕</button>
             </div>
+            {t.ticket_type === "aku" && (
+                <p style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", marginBottom: 10 }}>AKU – doplňte ručně podle rozkliknutého tiketu.</p>
+            )}
 
-            {/* Týmy */}
+            {/* Sport, Sázkovka */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
+                <div>
+                    <label style={{ color: "var(--color-text-muted)", fontSize: "0.7rem" }}>Sport</label>
+                    <select className="input" style={{ padding: "6px 10px", fontSize: "0.8rem" }}
+                        value={t.sport || ""} onChange={(e) => onUpdate(i, "sport", e.target.value)}>
+                        <option value="">– vybrat –</option>
+                        {sports.map(s => <option key={s.id} value={s.name}>{s.icon} {s.name}</option>)}
+                    </select>
+                </div>
+                <div>
+                    <label style={{ color: "var(--color-text-muted)", fontSize: "0.7rem" }}>Sázkovka</label>
+                    <select className="input" style={{
+                        padding: "6px 10px",
+                        fontSize: "0.8rem",
+                        color: (t.bookmaker_id || defaultBookmakerId) === bookmakers.find(b => b.name === 'Tipsport')?.id ? '#3498db' : ((t.bookmaker_id || defaultBookmakerId) === bookmakers.find(b => b.name === 'Betano')?.id ? '#ff7000' : 'inherit')
+                    }}
+                        value={t.bookmaker_id || defaultBookmakerId || ""} onChange={(e) => onUpdate(i, "bookmaker_id", e.target.value ? parseInt(e.target.value) : null)}>
+                        {bookmakers.map(b => (
+                            <option key={b.id} value={b.id} style={{ color: b.name === 'Tipsport' ? '#3498db' : '#ff7000' }}>
+                                {b.name === 'Tipsport' ? '[T] ' : '[B] '}{b.name}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+            </div>
+            {/* Domácí, Hosté */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 8, marginBottom: 10, alignItems: "end" }}>
                 <div>
                     <label style={{ color: "var(--color-text-muted)", fontSize: "0.7rem" }}>Domácí</label>
@@ -583,17 +896,8 @@ function TicketForm({ ticket: t, index: i, sports, allMarketTypes, topMarketType
                         value={t.away_team || ""} onChange={(e) => onUpdate(i, "away_team", e.target.value)} />
                 </div>
             </div>
-
-            {/* Detaily */}
+            {/* Typ sázky, Výběr, Kurz, Vklad, Výhra */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, fontSize: "0.8rem" }}>
-                <div>
-                    <label style={{ color: "var(--color-text-muted)", fontSize: "0.7rem" }}>Sport</label>
-                    <select className="input" style={{ padding: "6px 10px", fontSize: "0.8rem" }}
-                        value={t.sport || ""} onChange={(e) => onUpdate(i, "sport", e.target.value)}>
-                        <option value="">– vybrat –</option>
-                        {sports.map(s => <option key={s.id} value={s.name}>{s.icon} {s.name}</option>)}
-                    </select>
-                </div>
                 <div>
                     <label style={{ color: "var(--color-text-muted)", fontSize: "0.7rem" }}>Typ sázky</label>
                     <MarketTypeSelect
@@ -606,23 +910,8 @@ function TicketForm({ ticket: t, index: i, sports, allMarketTypes, topMarketType
                 <div>
                     <label style={{ color: "var(--color-text-muted)", fontSize: "0.7rem" }}>Výběr</label>
                     <input className="input" style={{ padding: "6px 10px", fontSize: "0.8rem" }}
-                        placeholder="Over / Under / 1X2..."
+                        placeholder={t.ticket_type === "aku" ? "AKU – vyplňte ručně" : "Over / Under / 1X2..."}
                         value={t.selection || ""} onChange={(e) => onUpdate(i, "selection", e.target.value)} />
-                </div>
-                <div>
-                    <label style={{ color: "var(--color-text-muted)", fontSize: "0.7rem" }}>Sázkovka</label>
-                    <select className="input" style={{
-                        padding: "6px 10px",
-                        fontSize: "0.8rem",
-                        color: t.bookmaker_id === bookmakers.find(b => b.name === 'Tipsport')?.id ? '#3498db' : (t.bookmaker_id === bookmakers.find(b => b.name === 'Betano')?.id ? '#ff7000' : 'inherit')
-                    }}
-                        value={t.bookmaker_id || ""} onChange={(e) => onUpdate(i, "bookmaker_id", parseInt(e.target.value))}>
-                        {bookmakers.map(b => (
-                            <option key={b.id} value={b.id} style={{ color: b.name === 'Tipsport' ? '#3498db' : '#ff7000' }}>
-                                {b.name === 'Tipsport' ? '[T] ' : '[B] '}{b.name}
-                            </option>
-                        ))}
-                    </select>
                 </div>
                 <div>
                     <label style={{ color: "var(--color-text-muted)", fontSize: "0.7rem" }}>Kurz</label>
@@ -631,34 +920,42 @@ function TicketForm({ ticket: t, index: i, sports, allMarketTypes, topMarketType
                         value={t.odds || ""} onChange={(e) => onUpdate(i, "odds", e.target.value)} />
                 </div>
                 <div>
-                    <label style={{ color: "var(--color-text-muted)", fontSize: "0.7rem" }}>Vklad (Kč)</label>
+                    <label style={{ color: "var(--color-text-muted)", fontSize: "0.7rem" }}>Vklad</label>
                     <input className="input" type="number" style={{ padding: "6px 10px", fontSize: "0.8rem" }}
                         placeholder="50"
                         value={t.stake || ""} onChange={(e) => onUpdate(i, "stake", e.target.value)} />
                 </div>
                 <div>
-                    <label style={{ color: "var(--color-text-muted)", fontSize: "0.7rem" }}>Výhra (Kč)</label>
+                    <label style={{ color: "var(--color-text-muted)", fontSize: "0.7rem" }}>Výhra</label>
                     <input className="input" type="number" style={{ padding: "6px 10px", fontSize: "0.8rem" }}
                         placeholder="111"
                         value={t.payout || ""} onChange={(e) => onUpdate(i, "payout", e.target.value)} />
                 </div>
             </div>
 
-            {/* Status + Live */}
-            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                <select className="input" style={{ width: 130, padding: "6px 10px", fontSize: "0.8rem" }}
-                    value={t.status || "open"} onChange={(e) => onUpdate(i, "status", e.target.value)}>
+            {/* Stav + Live */}
+            <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center" }}>
+                <div>
+                    <label style={{ color: "var(--color-text-muted)", fontSize: "0.7rem", display: "block", marginBottom: 4 }}>Stav</label>
+                    <select className="input" style={{ width: 130, padding: "6px 10px", fontSize: "0.8rem" }}
+                        value={t.status || "open"} onChange={(e) => onUpdate(i, "status", e.target.value)}>
                     <option value="won">✅ Výhra</option>
                     <option value="lost">❌ Prohra</option>
                     <option value="open">⏳ Čeká</option>
                     <option value="void">↩️ Vráceno</option>
-                </select>
-                <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: "0.8rem", color: "var(--color-text-secondary)" }}>
+                    </select>
+                </div>
+                <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: "0.8rem", color: "var(--color-text-secondary)", marginTop: 20 }}>
                     <input type="checkbox" checked={t.is_live || false}
                         onChange={(e) => onUpdate(i, "is_live", e.target.checked)} />
                     LIVE
                 </label>
             </div>
+            {hasErrors && (
+                <div style={{ marginTop: 8, padding: "6px 10px", background: "var(--color-red-soft)", borderRadius: 8, fontSize: "0.75rem", color: "var(--color-red)" }}>
+                    {errors.join(" • ")}
+                </div>
+            )}
         </div>
     );
 }

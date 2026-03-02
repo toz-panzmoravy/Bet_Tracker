@@ -10,6 +10,8 @@ import {
 } from "../lib/api";
 import MarketTypeModal from "./MarketTypeModal";
 import MarketTypeKPIs from "./MarketTypeKPIs";
+import { useToast } from "../components/Toast";
+import ConfirmModal from "../components/ConfirmModal";
 
 export default function MarketTypesPage() {
     const [marketTypes, setMarketTypes] = useState([]);
@@ -17,11 +19,13 @@ export default function MarketTypesPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [search, setSearch] = useState("");
+    const toast = useToast();
 
     // Modal state
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingId, setEditingId] = useState(null);
     const [formData, setFormData] = useState({ name: "", description: "", sport_ids: [] });
+    const [deleteConfirmId, setDeleteConfirmId] = useState(null);
 
     useEffect(() => {
         loadData();
@@ -59,18 +63,26 @@ export default function MarketTypesPage() {
             setEditingId(null);
             setFormData({ name: "", description: "" });
             loadData();
+            toast.success(editingId ? "Typ sázky byl upraven" : "Typ sázky byl vytvořen");
         } catch (e) {
-            alert("Chyba: " + e.message);
+            toast.error("Chyba: " + e.message);
         }
     }
 
     async function handleDelete(id) {
-        if (!confirm("Opravdu smazat tento typ sázky?")) return;
+        setDeleteConfirmId(id);
+    }
+
+    async function confirmDelete() {
+        const id = deleteConfirmId;
+        setDeleteConfirmId(null);
+        if (id == null) return;
         try {
             await deleteMarketType(id);
             loadData();
+            toast.success("Typ sázky byl smazán");
         } catch (e) {
-            alert("Chyba: " + e.message);
+            toast.error("Chyba: " + e.message);
         }
     }
 
@@ -203,7 +215,7 @@ export default function MarketTypesPage() {
                                     <td style={{ textAlign: "right" }}>
                                         <div style={{ display: "flex", justifyContent: "flex-end", gap: 4 }}>
                                             <button className="btn-icon-v2" onClick={() => openEditModal(mt)} title="Upravit">✏️</button>
-                                            <button className="btn-icon-v2 danger" onClick={() => handleDelete(mt.id)} title="Smazat">🗑️</button>
+                                            <button className="btn-icon-v2 danger" onClick={() => handleDelete(mt.id)} title="Smazat">🗑</button>
                                         </div>
                                     </td>
                                 </tr>
@@ -228,6 +240,17 @@ export default function MarketTypesPage() {
                 formData={formData}
                 setFormData={setFormData}
                 sports={sports}
+            />
+
+            <ConfirmModal
+                open={deleteConfirmId != null}
+                title="Smazat typ sázky"
+                message="Opravdu smazat tento typ sázky? Tato akce je nevratná."
+                confirmLabel="Smazat"
+                cancelLabel="Zrušit"
+                variant="danger"
+                onConfirm={confirmDelete}
+                onCancel={() => setDeleteConfirmId(null)}
             />
 
             <style jsx>{`

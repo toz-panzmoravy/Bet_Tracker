@@ -23,18 +23,32 @@ def seed():
             print("✅ Bookmakeři vytvořeni")
 
         # ─── Sporty ─────────────────────
+        ALL_SPORTS = [
+            ("Fotbal", "⚽"),
+            ("Hokej", "🏒"),
+            ("Tenis", "🎾"),
+            ("Basketbal", "🏀"),
+            ("Esport", "🎮"),
+            ("Florbal", "🏑"),
+            ("Darts", "🎯"),
+            ("Rugby", "🏉"),
+            ("Handball", "🤾"),
+            ("Lacros", "🥍"),
+            ("Baseball", "⚾"),
+            ("NFL", "🏈"),
+            ("Ostatní", "🏆"),
+        ]
         if db.query(Sport).count() == 0:
-            sports = [
-                Sport(name="Fotbal", icon="⚽"),
-                Sport(name="Hokej", icon="🏒"),
-                Sport(name="Tenis", icon="🎾"),
-                Sport(name="Basketbal", icon="🏀"),
-                Sport(name="Esport", icon="🎮"),
-                Sport(name="Ostatní", icon="🏆"),
-            ]
+            sports = [Sport(name=name, icon=icon) for name, icon in ALL_SPORTS]
             db.add_all(sports)
             db.commit()
             print("✅ Sporty vytvořeny")
+        else:
+            for name, icon in ALL_SPORTS:
+                if db.query(Sport).filter(Sport.name == name).first() is None:
+                    db.add(Sport(name=name, icon=icon))
+            db.commit()
+            print("✅ Sporty zkontrolovány / doplněny")
 
         # ─── Ligy ───────────────────────
         if db.query(League).count() == 0:

@@ -9,6 +9,14 @@ from app.schemas.schemas import MarketTypeCreate, MarketTypeUpdate, MarketTypeOu
 
 router = APIRouter(prefix="/api/market-types", tags=["Typy sázek"])
 
+
+def _normalize_market_type_name(name: str) -> str:
+    """Trim, lowercase, normalizace čárek na tečky pro porovnání."""
+    if not name:
+        return ""
+    return name.strip().lower().replace(",", ".")
+
+
 @router.get("", response_model=List[MarketTypeOut])
 def list_market_types(db: Session = Depends(get_db)):
     """Seznam všech aktivních typů sázek."""
@@ -75,6 +83,32 @@ def get_top_market_types(limit: int = 5, sport_id: Optional[int] = None, db: Ses
         
     ids = [t[0] for t in top_ids]
     return db.query(MarketType).filter(MarketType.id.in_(ids)).all()
+
+
+def _market_type_with_sports(db: Session, mt_id: int):
+    return db.query(MarketType).options(joinedload(MarketType.sports)).filter(MarketType.id == mt_id).first()
+
+
+@router.post("/find-or-create", response_model=MarketTypeOut)
+def find_or_create_market_type(data: MarketTypeCreate, db: Session = Depends(get_db)):
+    """Najde typ sázky podle normalizovaného názvu, nebo vytvoří nový. Omezí duplicity (Over 2,5 vs Over 2.5)."""
+    name = (data.name or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Název nesmí být prázdný")
+    normalized = _normalize_market_type_name(name)
+    for mt in db.query(MarketType).filter(MarketType.is_active == True).all():
+        if _normalize_market_type_name(mt.name) == normalized:
+            return _market_type_with_sports(db, mt.id)
+    mt = MarketType(name=name, description=data.description, is_active=True)
+    if data.sport_ids:
+        sports = db.query(Sport).filter(Sport.id.in_(data.sport_ids)).all()
+        mt.sports = sports
+    else:
+        mt.sports = db.query(Sport).all()
+    db.add(mt)
+    db.commit()
+    db.refresh(mt)
+    return _market_type_with_sports(db, mt.id)
 
 
 @router.post("", response_model=MarketTypeOut)

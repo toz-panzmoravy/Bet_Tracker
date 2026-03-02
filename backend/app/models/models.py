@@ -117,6 +117,7 @@ class Ticket(Base):
     profit = Column(Numeric(10, 2), nullable=True)
 
     # Metadata
+    parent_id = Column(Integer, ForeignKey("tickets.id"), nullable=True)  # AKU: nadřazený tiket
     status = Column(Enum(TicketStatus), default=TicketStatus.open, nullable=False)
     ticket_type = Column(Enum(TicketType), default=TicketType.solo, nullable=False)
     is_live = Column(Boolean, default=False)
@@ -132,6 +133,7 @@ class Ticket(Base):
     sport = relationship("Sport", back_populates="tickets")
     league = relationship("League", back_populates="tickets")
     market_type_rel = relationship("MarketType", back_populates="tickets")
+    parent = relationship("Ticket", remote_side=[id], backref="children")
 
 
 # ─── AI Analyses ─────────────────────────────────────────

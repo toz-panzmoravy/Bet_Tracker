@@ -502,3 +502,61 @@ select.input {
   /* Sytější modrá */
   color: #bfdbfe;
 }
+
+/* Responzivita */
+@media (max-width: 1024px) {
+  .app-sidebar {
+    width: 72px !important;
+    padding: 1rem 0.5rem !important;
+  }
+  .sidebar-logo [role="banner"],
+  .sidebar-logo > div:first-child {
+    font-size: 1.5rem !important;
+    text-align: center;
+  }
+  .sidebar-label,
+  .sidebar-footer .sidebar-label {
+    display: none !important;
+  }
+  .nav-link {
+    justify-content: center;
+    padding: 10px !important;
+  }
+  .app-main {
+    margin-left: 72px !important;
+    padding: 1rem !important;
+  }
+}
+
+@media (max-width: 900px) {
+  .dashboard-kpi-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  .dashboard-charts-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 500px) {
+  .dashboard-kpi-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Tikety: horizontální scroll tabulky na úzkých displejích */
+@media (max-width: 768px) {
+  .tickets-table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .tickets-table-wrapper .data-table {
+    min-width: 800px;
+  }
+}
+
+/* Import: jeden sloupec na úzkých displejích */
+@media (max-width: 768px) {
+  .import-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
