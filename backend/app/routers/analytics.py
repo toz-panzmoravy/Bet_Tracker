@@ -180,6 +180,7 @@ def get_analytics_summary(
                 won_count=d["won"],
                 lost_count=d["lost"],
                 void_count=d["void"],
+                stake=st,
                 profit=d["profit"],
                 roi_percent=round(ro, 2),
                 hitrate_percent=round(hr, 2),

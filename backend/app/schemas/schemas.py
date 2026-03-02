@@ -387,6 +387,7 @@ class AnalyticsMarketItem(BaseModel):
     won_count: int = 0
     lost_count: int = 0
     void_count: int = 0
+    stake: Decimal = Decimal("0")  # součet vkladů (pro slučování a ROI)
     profit: Decimal = Decimal("0")
     roi_percent: float = 0.0
     hitrate_percent: float = 0.0

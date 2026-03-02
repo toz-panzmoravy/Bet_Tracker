@@ -264,20 +264,67 @@ export default function AnalyticsPage() {
       const sid = parseInt(sportFilter, 10);
       list = list.filter((m) => m.sport_id === sid);
     }
+    // Výchozí filtr: nezobrazovat "Neznámý" a typy s 0% hitrate
+    list = list.filter(
+      (m) => m.market_type_name !== "Neznámý" && Number(m.hitrate_percent) !== 0
+    );
     return list;
   }, [data?.by_market, sportFilter]);
 
+  // Sloučení řádků se stejným názvem typu sázky (součet hodnot + přepočet hitrate a ROI)
+  const byMarketMerged = useMemo(() => {
+    const byName = {};
+    for (const m of byMarketFiltered) {
+      const key = m.market_type_name;
+      if (!byName[key]) {
+        byName[key] = {
+          market_type_name: key,
+          market_type_id: m.market_type_id,
+          sport_id: m.sport_id,
+          sport_name: m.sport_name,
+          tickets_count: 0,
+          won_count: 0,
+          lost_count: 0,
+          void_count: 0,
+          stake: 0,
+          profit: 0,
+        };
+      }
+      const row = byName[key];
+      row.tickets_count += m.tickets_count ?? 0;
+      row.won_count += m.won_count ?? 0;
+      row.lost_count += m.lost_count ?? 0;
+      row.void_count += m.void_count ?? 0;
+      row.stake += Number(m.stake ?? 0);
+      row.profit += Number(m.profit ?? 0);
+    }
+    return Object.values(byName).map((row) => {
+      const w = row.won_count;
+      const l = row.lost_count;
+      const hitrate_percent = w + l > 0 ? Math.round((w / (w + l)) * 1000) / 10 : 0;
+      const roi_percent = row.stake > 0 ? Math.round((row.profit / row.stake) * 10000) / 100 : 0;
+      return {
+        ...row,
+        hitrate_percent,
+        roi_percent,
+      };
+    });
+  }, [byMarketFiltered]);
+
   const byMarketChartData = useMemo(() => {
-    return byMarketFiltered.map((m) => ({
+    return byMarketMerged.map((m) => ({
       market_type_name: m.market_type_name,
       market_type_id: m.market_type_id,
       sport_name: m.sport_name,
+      sport_id: m.sport_id,
       tickets_count: m.tickets_count,
+      won_count: m.won_count,
+      lost_count: m.lost_count,
       profit: Number(m.profit),
       roi_percent: m.roi_percent,
       hitrate_percent: m.hitrate_percent,
     }));
-  }, [byMarketFiltered]);
+  }, [byMarketMerged]);
 
   const worstCombos = useMemo(() => {
     if (!data?.by_market?.length) return [];
@@ -544,34 +591,41 @@ export default function AnalyticsPage() {
                 </select>
               </div>
               {byMarketChartData.length ? (
-                <ResponsiveContainer width="100%" height={280}>
-                  <BarChart data={byMarketChartData} margin={{ top: 20, right: 10, left: 0, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(42, 45, 62, 0.5)" vertical={false} />
+                <ResponsiveContainer width="100%" height={Math.max(280, byMarketChartData.length * 36)}>
+                  <BarChart
+                    data={byMarketChartData}
+                    layout="vertical"
+                    margin={{ top: 8, right: 50, left: 4, bottom: 8 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(42, 45, 62, 0.5)" horizontal={false} />
                     <XAxis
-                      dataKey="market_type_name"
-                      tick={{ fill: "#8b8fa3", fontSize: 10 }}
+                      type="number"
+                      domain={[0, 100]}
+                      tick={{ fill: "#5c6078", fontSize: 10 }}
                       axisLine={{ stroke: "rgba(42, 45, 62, 0.5)" }}
                       tickLine={false}
-                      interval={0}
-                    />
-                    <YAxis
-                      tick={{ fill: "#5c6078", fontSize: 10 }}
-                      axisLine={false}
-                      tickLine={false}
-                      domain={[0, 100]}
                       tickFormatter={(v) => `${v}%`}
                     />
+                    <YAxis
+                      type="category"
+                      dataKey="market_type_name"
+                      width={140}
+                      tick={{ fill: "#8b8fa3", fontSize: 11 }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
                     <Tooltip content={<HitrateBarTooltip />} cursor={{ fill: "rgba(99, 102, 241, 0.06)" }} />
-                    <Bar
-                      dataKey="hitrate_percent"
-                      name="Hitrate %"
-                      radius={[8, 8, 0, 0]}
-                      maxBarSize={40}
-                    >
+                    <Bar dataKey="hitrate_percent" name="Hitrate %" radius={[0, 4, 4, 0]} maxBarSize={24} barCategoryGap="12%">
+                      <LabelList
+                        dataKey="hitrate_percent"
+                        position="right"
+                        formatter={(v) => `${Number(v).toFixed(0)}%`}
+                        style={{ fill: "#e4e6f0", fontSize: 11, fontWeight: 600 }}
+                      />
                       {byMarketChartData.map((entry, i) => (
                         <Cell
                           key={i}
-                          fill={entry.roi_percent >= 0 ? "#22c55e" : "#ef4444"}
+                          fill={Number(entry.profit) >= 0 ? "#22c55e" : "#ef4444"}
                           fillOpacity={0.85}
                         />
                       ))}
