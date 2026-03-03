@@ -4,7 +4,9 @@
   "version": "0.1.0",
   "description": "Scraper pro import tiketů z Tipsportu do BetTrackeru.",
   "permissions": [
-    "storage"
+    "storage",
+    "alarms",
+    "tabs"
   ],
   "host_permissions": [
     "*://*.tipsport.cz/*",

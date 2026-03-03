@@ -15,9 +15,12 @@ from app.schemas import (
     TipsportScrapeResponse,
     TipsportScrapeResultItem,
     TipsportScrapeTicketIn,
+    TipsportScrapePreviewResponse,
+    ScrapePreviewTicket,
 )
 from app.routers.tickets import create_ticket as _create_ticket
 from app.routers.tickets import update_ticket as _update_ticket
+from app.preview_store import create_preview_id, set_preview
 
 
 router = APIRouter(prefix="/api/import/tipsport", tags=["Import – Tipsport"])
@@ -76,14 +79,8 @@ def _map_sport_label_to_id(db: Session, label: str | None) -> int:
 
 def _map_status(raw: str | None, payout: Decimal | None) -> TicketStatus:
     """Převede surový status z Tipsportu na TicketStatus."""
-    # Primárně: pokud je skutečná výhra > 0, je to výhra
-    try:
-        if payout is not None and Decimal(payout) > 0:
-            return TicketStatus.won
-    except Exception:
-        pass
-
-    # Pokud je v textu explicitní stav (včetně ikon jako "#i170")
+    # Nejdřív respektovat explicitní stav z Tipsportu (ikona/status)
+    # U live tiketů je "Možná výhra" = potenciální výhra, ne skutečná – tiket je stále open
     if raw:
         val = raw.strip().lower()
         # Ikony stavu dle Sports_div
@@ -104,13 +101,15 @@ def _map_status(raw: str | None, payout: Decimal | None) -> TicketStatus:
         if any(x in val for x in ("lost", "prohra", "✗", "❌")):
             return TicketStatus.lost
 
-    # Fallback: payout == 0 typicky znamená prohra (pokud už je tiket vyhodnocen)
-    if payout is not None:
-        try:
+    # Fallback když raw chybí: podle payout (skutečná výhra > 0 = won, 0 = lost, jinak open)
+    try:
+        if payout is not None:
+            if Decimal(payout) > 0:
+                return TicketStatus.won
             if Decimal(payout) == 0:
                 return TicketStatus.lost
-        except Exception:
-            pass
+    except Exception:
+        pass
     return TicketStatus.open
 
 
@@ -201,6 +200,14 @@ def _build_ticket_create(
     if item.tipsport_key:
         tipsport_ref = f"{_TIPSPORT_KEY_PREFIX}{item.tipsport_key.strip()}"
 
+    is_live = getattr(item, "is_live", None)
+    if is_live is None:
+        is_live = False
+
+    # Bezpečný fallback pro stake – pokud by z nějakého důvodu přišel None,
+    # považujeme ho za 0, aby tiket šel vytvořit a skončil v incomplete filtru.
+    stake = item.stake if item.stake is not None else Decimal("0")
+
     return TicketCreate(
         bookmaker_id=tipsport_bookmaker_id,
         sport_id=sport_id,
@@ -213,12 +220,12 @@ def _build_ticket_create(
         market_label=market_label,
         selection=selection,
         odds=odds,
-        stake=item.stake,
+        stake=stake,
         payout=payout,
         profit=None,
         status=status.value,
         ticket_type=ticket_type,
-        is_live=False,
+        is_live=bool(is_live),
         source="manual",
     )
 
@@ -228,6 +235,8 @@ def _find_duplicate(
     bookmaker_id: int,
     data: TicketCreate,
     tipsport_key: str | None,
+    has_original_stake: bool,
+    has_original_odds: bool,
 ) -> Ticket | None:
     """
     Najde existující tiket podle kombinace bookmaker + týmy + stake + odds (+čas).
@@ -251,9 +260,22 @@ def _find_duplicate(
         Ticket.bookmaker_id == bookmaker_id,
         Ticket.home_team == data.home_team,
         Ticket.away_team == data.away_team,
-        Ticket.stake == data.stake,
-        Ticket.odds == data.odds,
     )
+
+    # Pokud máme spolehlivě rozpoznaný vklad / kurz, použijeme je pro zpřesnění párování.
+    # Když ne (stake=0 nebo odds jsou jen fallback 1.0), raději je vynecháme,
+    # aby import nikdy nevynechal tiket jen kvůli chybě v parsování.
+    try:
+        if has_original_stake and data.stake is not None and Decimal(data.stake) > 0:
+            query = query.filter(Ticket.stake == data.stake)
+    except Exception:
+        pass
+
+    try:
+        if has_original_odds and data.odds is not None:
+            query = query.filter(Ticket.odds == data.odds)
+    except Exception:
+        pass
 
     if data.event_date:
         window_start = data.event_date - timedelta(minutes=10)
@@ -264,6 +286,168 @@ def _find_duplicate(
         )
 
     return query.first()
+
+
+def _build_duplicate_update_payload(
+    duplicate: Ticket,
+    data: TicketCreate,
+    item: TipsportScrapeTicketIn,
+) -> dict:
+    """
+    Připraví payload pro synchronizaci existujícího tiketu s aktuálními daty z Tipsportu.
+    Sdílená logika pro /scrape i /scrape/preview.
+    """
+    update_payload: dict = {}
+
+    # status a is_live: přepsat z Tipsportu (Tipsport má vždy pravdu)
+    dup_status = str(getattr(duplicate.status, "value", duplicate.status))
+    if dup_status != data.status:
+        update_payload["status"] = data.status
+    item_is_live = getattr(item, "is_live", None)
+    if item_is_live is not None and bool(duplicate.is_live) != bool(item_is_live):
+        update_payload["is_live"] = bool(item_is_live)
+
+    # sport: opravovat při změně
+    if duplicate.sport_id != data.sport_id:
+        update_payload["sport_id"] = data.sport_id
+
+    # payout/odds: opravovat, pokud se liší nebo chybí
+    try:
+        if data.payout is not None and (
+            duplicate.payout is None
+            or Decimal(duplicate.payout) != Decimal(data.payout)
+        ):
+            update_payload["payout"] = data.payout
+    except Exception:
+        pass
+
+    try:
+        if data.odds is not None and (
+            duplicate.odds is None
+            or Decimal(duplicate.odds) != Decimal(data.odds)
+        ):
+            update_payload["odds"] = data.odds
+    except Exception:
+        pass
+
+    # event_date: doplnit / srovnat podle Tipsport placed_at
+    if data.event_date is not None:
+        if duplicate.event_date is None:
+            update_payload["event_date"] = data.event_date
+        else:
+            try:
+                diff = abs(data.event_date - duplicate.event_date)
+                if diff > timedelta(hours=12):
+                    update_payload["event_date"] = data.event_date
+            except Exception:
+                # Pokud by došlo k chybě při výpočtu diff, raději event_date neměnit
+                pass
+
+    # uložit tipsport_key pro budoucí stabilní dedupe
+    if item.tipsport_key:
+        ref = f"{_TIPSPORT_KEY_PREFIX}{item.tipsport_key.strip()}"
+        if duplicate.ocr_image_path != ref:
+            update_payload["ocr_image_path"] = ref
+
+    return update_payload
+
+
+def _sync_duplicate_from_tipsport(
+    db: Session,
+    duplicate: Ticket,
+    data: TicketCreate,
+    item: TipsportScrapeTicketIn,
+) -> Ticket | None:
+    """
+    Aplikuje změny z Tipsportu na existující tiket.
+
+    Vrací aktualizovaný tiket, pokud došlo ke změně, jinak None.
+    """
+    update_payload = _build_duplicate_update_payload(duplicate, data, item)
+    if not update_payload:
+        return None
+    return _update_ticket(
+        ticket_id=duplicate.id,
+        data=TicketUpdate(**update_payload),
+        db=db,
+    )
+
+
+def _ticket_create_to_preview(db: Session, data: TicketCreate) -> ScrapePreviewTicket:
+    sport = db.query(Sport).filter(Sport.id == data.sport_id).first()
+    sport_name = sport.name if sport else "Neznámý"
+    event_date_str = data.event_date.isoformat() if data.event_date else None
+    return ScrapePreviewTicket(
+        home_team=data.home_team,
+        away_team=data.away_team,
+        sport_id=data.sport_id,
+        sport_name=sport_name,
+        market_label=data.market_label,
+        selection=data.selection,
+        odds=data.odds,
+        stake=data.stake,
+        payout=data.payout,
+        status=data.status,
+        bookmaker_id=data.bookmaker_id,
+        ticket_type=data.ticket_type,
+        event_date=event_date_str,
+        is_live=data.is_live,
+    )
+
+
+@router.post("/scrape/preview", response_model=TipsportScrapePreviewResponse)
+def scrape_preview(
+    payload: TipsportScrapeRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Náhled importu: namapuje a vyfiltruje duplicity.
+
+    Nové tikety vrací v náhledu (preview_id + new_tickets) a nic
+    přímo neukládá. Pokud ale najde existující tiket (duplicitu),
+    tiše ho v databázi zaktualizuje podle aktuálních dat z Tipsportu
+    (status, is_live, sport, payout, odds, event_date, tipsport_key),
+    aby se při každém spuštění importu opravily stavy tiketů.
+    """
+    tipsport_bookmaker_id = _get_tipsport_bookmaker_id(db)
+    new_tickets: List[ScrapePreviewTicket] = []
+    skipped_count = 0
+
+    for item in payload.tickets:
+        try:
+            data = _build_ticket_create(db, tipsport_bookmaker_id, item)
+            duplicate = _find_duplicate(
+                db,
+                tipsport_bookmaker_id,
+                data,
+                item.tipsport_key,
+                has_original_stake=bool(item.stake is not None and item.stake > 0),
+                has_original_odds=bool(item.odds is not None),
+            )
+            if duplicate:
+                # Tichý \"upsert\" duplicity – stejné chování jako v /scrape endpointu,
+                # jen bez zapisování do výsledků; pro uživatele se duplicate dál tváří
+                # jako přeskočený v náhledu.
+                try:
+                    _sync_duplicate_from_tipsport(db, duplicate, data, item)
+                except Exception:
+                    # Chyba při synchronizaci jedné duplicity nesmí shodit celý náhled importu.
+                    pass
+
+                skipped_count += 1
+                continue
+
+            new_tickets.append(_ticket_create_to_preview(db, data))
+        except (SQLAlchemyError, ValueError):
+            continue
+
+    preview_id = create_preview_id()
+    set_preview(preview_id, [t.model_dump(mode="json") for t in new_tickets])
+    return TipsportScrapePreviewResponse(
+        preview_id=preview_id,
+        new_tickets=new_tickets,
+        skipped_count=skipped_count,
+    )
 
 
 @router.post("/scrape", response_model=TipsportScrapeResponse)
@@ -293,49 +477,23 @@ def import_from_scraper(
         try:
             data = _build_ticket_create(db, tipsport_bookmaker_id, item)
 
-            duplicate = _find_duplicate(db, tipsport_bookmaker_id, data, item.tipsport_key)
+            duplicate = _find_duplicate(
+                db,
+                tipsport_bookmaker_id,
+                data,
+                item.tipsport_key,
+                has_original_stake=bool(item.stake is not None and item.stake > 0),
+                has_original_odds=bool(item.odds is not None),
+            )
             if duplicate:
-                # Upsert: pokud se liší sport/status/payout/odds, aktualizovat přes standardní update_ticket (přepočet profitu)
-                update_payload = {}
+                # Upsert: synchronizovat stav s Tipsportem (důležité pro LIVE – vždy nastavit status + is_live)
+                updated = None
+                try:
+                    updated = _sync_duplicate_from_tipsport(db, duplicate, data, item)
+                except Exception:
+                    updated = None
 
-                # sport: opravovat vždy, nebo alespoň když je Ostatní
-                if duplicate.sport_id != data.sport_id:
-                    update_payload["sport_id"] = data.sport_id
-
-                # payout/status/odds: opravovat, pokud se liší nebo chybí
-                if data.payout is not None and (duplicate.payout is None or Decimal(duplicate.payout) != Decimal(data.payout)):
-                    update_payload["payout"] = data.payout
-                if duplicate.status is None or str(getattr(duplicate.status, "value", duplicate.status)) != data.status:
-                    update_payload["status"] = data.status
-                if data.odds is not None and (duplicate.odds is None or Decimal(duplicate.odds) != Decimal(data.odds)):
-                    update_payload["odds"] = data.odds
-
-                # event_date: doplnit / srovnat podle Tipsport placed_at
-                if data.event_date is not None:
-                    if duplicate.event_date is None:
-                        update_payload["event_date"] = data.event_date
-                    else:
-                        # Pokud se datum výrazně liší (jiný den), můžeme ho přepsat
-                        try:
-                            diff = abs(data.event_date - duplicate.event_date)
-                            if diff > timedelta(hours=12):
-                                update_payload["event_date"] = data.event_date
-                        except Exception:
-                            # Pokud by došlo k chybě při výpočtu diff, raději event_date neměnit
-                            pass
-
-                # uložit tipsport_key pro budoucí stabilní dedupe
-                if item.tipsport_key:
-                    ref = f"{_TIPSPORT_KEY_PREFIX}{item.tipsport_key.strip()}"
-                    if duplicate.ocr_image_path != ref:
-                        update_payload["ocr_image_path"] = ref
-
-                if update_payload:
-                    updated = _update_ticket(
-                        ticket_id=duplicate.id,
-                        data=TicketUpdate(**update_payload),
-                        db=db,
-                    )
+                if updated is not None:
                     updated_count += 1
                     results.append(
                         TipsportScrapeResultItem(

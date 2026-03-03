@@ -16,6 +16,7 @@ from app.schemas import (
     AnalyticsSportItem,
     AnalyticsMarketItem,
     AnalyticsTrendPoint,
+    AnalyticsDayItem,
 )
 
 router = APIRouter(prefix="/api/analytics", tags=["Analytics"])
@@ -187,6 +188,46 @@ def get_analytics_summary(
             )
         )
 
+    # by_day_of_week (0=pondělí … 6=neděle; použít event_date, fallback created_at)
+    DAY_NAMES = ["Po", "Út", "St", "Čt", "Pá", "So", "Ne"]
+    by_dow_map = {d: {"won": 0, "lost": 0, "void": 0, "stake": Decimal("0"), "profit": Decimal("0"), "count": 0} for d in range(7)}
+    for t in tickets:
+        dt = t.event_date or t.created_at
+        if not dt or dt.year < 2000:
+            continue
+        dow = dt.weekday()  # 0=Monday, 6=Sunday
+        by_dow_map[dow]["count"] += 1
+        if t.status in SETTLED_STATUSES:
+            by_dow_map[dow]["stake"] += Decimal(str(t.stake or 0))
+            by_dow_map[dow]["profit"] += Decimal(str(t.profit or 0))
+            if t.status == TicketStatus.won or t.status == TicketStatus.half_win:
+                by_dow_map[dow]["won"] += 1
+            elif t.status == TicketStatus.lost or t.status == TicketStatus.half_loss:
+                by_dow_map[dow]["lost"] += 1
+            else:
+                by_dow_map[dow]["void"] += 1
+    by_day_of_week = []
+    for dow in range(7):
+        d = by_dow_map[dow]
+        w, l = d["won"], d["lost"]
+        hr = (w / (w + l) * 100) if (w + l) > 0 else 0.0
+        st = d["stake"]
+        ro = (float(d["profit"]) / float(st) * 100) if st else 0.0
+        by_day_of_week.append(
+            AnalyticsDayItem(
+                day_of_week=dow,
+                day_name=DAY_NAMES[dow],
+                tickets_count=d["count"],
+                won_count=d["won"],
+                lost_count=d["lost"],
+                void_count=d["void"],
+                stake=d["stake"],
+                profit=d["profit"],
+                roi_percent=round(ro, 2),
+                hitrate_percent=round(hr, 2),
+            )
+        )
+
     # profit_trend (denní agregace, pouze vyhodnocené)
     daily = {}
     for t in settled:
@@ -215,5 +256,6 @@ def get_analytics_summary(
         kpis=kpis,
         by_sport=by_sport,
         by_market=by_market,
+        by_day_of_week=by_day_of_week,
         profit_trend=profit_trend,
     )

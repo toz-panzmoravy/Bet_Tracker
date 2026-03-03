@@ -124,6 +124,12 @@ class Ticket(Base):
     source = Column(Enum(TicketSource), default=TicketSource.manual, nullable=False)
     ocr_image_path = Column(String(500), nullable=True)
 
+    # Live tracking (LIVE feature)
+    live_match_url = Column(String(500), nullable=True)
+    tipsport_match_id = Column(String(50), nullable=True)
+    last_live_at = Column(DateTime, nullable=True)
+    last_live_snapshot = Column(JSON, nullable=True)
+
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)
     settled_at = Column(DateTime, nullable=True)
@@ -154,5 +160,8 @@ class AppSettings(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     bankroll = Column(Numeric(14, 2), nullable=True)
+    webhook_url = Column(String(500), nullable=True)
+    telegram_bot_token = Column(String(200), nullable=True)
+    telegram_chat_id = Column(String(100), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

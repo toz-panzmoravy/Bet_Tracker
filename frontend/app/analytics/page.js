@@ -124,6 +124,51 @@ function ProfitBarTooltip({ active, payload, label }) {
   );
 }
 
+function DayOfWeekTooltip({ active, payload }) {
+  if (!active || !payload?.length) return null;
+  const d = payload[0]?.payload;
+  if (!d) return null;
+  return (
+    <div
+      style={{
+        background: "rgba(22, 24, 34, 0.95)",
+        border: "1px solid rgba(99, 102, 241, 0.25)",
+        borderRadius: 12,
+        padding: "12px 16px",
+        fontSize: "0.8rem",
+        minWidth: 180,
+      }}
+    >
+      <p style={{ color: "#e4e6f0", fontWeight: 700, marginBottom: 8 }}>{d.day_name}</p>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "4px 16px" }}>
+        <span style={{ color: "#8b8fa3" }}>Profit</span>
+        <span
+          style={{
+            color: Number(d.profit) >= 0 ? "#22c55e" : "#ef4444",
+            fontWeight: 600,
+          }}
+        >
+          {Number(d.profit) >= 0 ? "+" : ""}
+          {Number(d.profit).toLocaleString("cs-CZ")} Kč
+        </span>
+        <span style={{ color: "#8b8fa3" }}>Sázek</span>
+        <span style={{ color: "#e4e6f0", fontWeight: 600 }}>{d.tickets_count}</span>
+        <span style={{ color: "#8b8fa3" }}>Hitrate</span>
+        <span style={{ color: "#e4e6f0", fontWeight: 600 }}>{d.hitrate_percent}%</span>
+        <span style={{ color: "#8b8fa3" }}>ROI</span>
+        <span
+          style={{
+            color: d.roi_percent >= 0 ? "#22c55e" : "#ef4444",
+            fontWeight: 600,
+          }}
+        >
+          {d.roi_percent}%
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function HitrateBarTooltip({ active, payload }) {
   if (!active || !payload?.length) return null;
   const d = payload[0]?.payload;
@@ -325,6 +370,20 @@ export default function AnalyticsPage() {
       hitrate_percent: m.hitrate_percent,
     }));
   }, [byMarketMerged]);
+
+  const byDayOfWeekChartData = useMemo(() => {
+    if (!data?.by_day_of_week?.length) return [];
+    return data.by_day_of_week.map((d) => ({
+      day_name: d.day_name,
+      day_of_week: d.day_of_week,
+      tickets_count: d.tickets_count,
+      won_count: d.won_count,
+      lost_count: d.lost_count,
+      profit: Number(d.profit),
+      roi_percent: d.roi_percent,
+      hitrate_percent: d.hitrate_percent,
+    }));
+  }, [data?.by_day_of_week]);
 
   const worstCombos = useMemo(() => {
     if (!data?.by_market?.length) return [];
@@ -543,6 +602,47 @@ export default function AnalyticsPage() {
                     <Bar dataKey="profit" name="Profit (Kč)" radius={[8, 8, 0, 0]} maxBarSize={50}>
                       <LabelList content={<BarLabel />} />
                       {bySportChartData.map((entry, i) => (
+                        <Cell
+                          key={i}
+                          fill={entry.profit >= 0 ? "#22c55e" : "#ef4444"}
+                          fillOpacity={0.85}
+                        />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <EmptyState />
+              )}
+            </ChartCard>
+          </div>
+
+          {/* Graf: Výkon podle dne v týdnu */}
+          <div style={{ marginBottom: "1.5rem" }}>
+            <ChartCard
+              title="Výkon podle dne v týdnu"
+              subtitle="Profit a hitrate podle dne (Po–Ne), barva podle zisku/ztráty"
+            >
+              {byDayOfWeekChartData.length ? (
+                <ResponsiveContainer width="100%" height={280}>
+                  <BarChart data={byDayOfWeekChartData} margin={{ top: 20, right: 10, left: 0, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(42, 45, 62, 0.5)" vertical={false} />
+                    <XAxis
+                      dataKey="day_name"
+                      tick={{ fill: "#8b8fa3", fontSize: 11 }}
+                      axisLine={{ stroke: "rgba(42, 45, 62, 0.5)" }}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      tick={{ fill: "#5c6078", fontSize: 10 }}
+                      axisLine={false}
+                      tickLine={false}
+                      tickFormatter={(v) => `${Number(v).toLocaleString("cs-CZ")}`}
+                    />
+                    <Tooltip content={<DayOfWeekTooltip />} cursor={{ fill: "rgba(99, 102, 241, 0.06)" }} />
+                    <Bar dataKey="profit" name="Profit (Kč)" radius={[8, 8, 0, 0]} maxBarSize={50}>
+                      <LabelList content={<BarLabel />} />
+                      {byDayOfWeekChartData.map((entry, i) => (
                         <Cell
                           key={i}
                           fill={entry.profit >= 0 ? "#22c55e" : "#ef4444"}

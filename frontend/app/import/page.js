@@ -1,6 +1,7 @@
 "use client";
-import { useState, useEffect, useCallback, useRef } from "react";
-import { ocrParseBase64, createTicket, getSports, getLeagues, getBookmakers, getMarketTypes, getTopMarketTypes, findOrCreateMarketType, checkOcrHealth } from "../lib/api";
+import { useState, useEffect, useCallback, useRef, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
+import { ocrParseBase64, createTicket, getSports, getLeagues, getBookmakers, getMarketTypes, getTopMarketTypes, findOrCreateMarketType, checkOcrHealth, getImportPreview } from "../lib/api";
 import { useToast } from "../components/Toast";
 
 const EMPTY_TICKET = {
@@ -10,7 +11,7 @@ const EMPTY_TICKET = {
     ticket_type: "solo",
 };
 
-export default function ImportPage() {
+function ImportPageContent() {
     const [image, setImage] = useState(null);
     const [imagePreview, setImagePreview] = useState(null);
     const [parsedTickets, setParsedTickets] = useState([]);
@@ -244,7 +245,39 @@ export default function ImportPage() {
     }
 
     const [validationErrors, setValidationErrors] = useState({});
+    const [previewError, setPreviewError] = useState("");
+    const searchParams = useSearchParams();
+    const previewId = searchParams.get("preview_id");
     const toast = useToast();
+
+    useEffect(() => {
+        if (!previewId || !bookmakers.length) return;
+        setPreviewError("");
+        getImportPreview(previewId)
+            .then((res) => {
+                const tickets = res.tickets || [];
+                const mapped = tickets.map((t) => ({
+                    home_team: t.home_team ?? "",
+                    away_team: t.away_team ?? "",
+                    sport: t.sport_name ?? "",
+                    sport_id: t.sport_id,
+                    market_label: t.market_label ?? "",
+                    selection: t.selection ?? "",
+                    odds: t.odds != null ? String(t.odds) : "",
+                    stake: t.stake != null ? String(t.stake) : "",
+                    payout: t.payout != null ? String(t.payout) : "",
+                    status: t.status ?? "open",
+                    bookmaker_id: t.bookmaker_id ?? null,
+                    ticket_type: t.ticket_type ?? "solo",
+                    is_live: !!(t.is_live),
+                    source: "manual",
+                }));
+                setParsedTickets(mapped);
+            })
+            .catch((err) => {
+                setPreviewError(err?.message?.includes("404") ? "Náhled vypršel nebo není k dispozici." : (err?.message || "Načtení náhledu selhalo."));
+            });
+    }, [previewId, bookmakers.length]);
 
     async function createOneTicket(t, opts = {}) {
         const sport = sports.find(s => s.name.toLowerCase() === (t.sport || "").toLowerCase());
@@ -360,9 +393,19 @@ export default function ImportPage() {
             if (totalInvalid === 0 && apiErrors.length === 0) {
                 setSaved(true);
                 toast.success("Všechny tikety byly uloženy.");
+                if (previewId && typeof window !== "undefined") {
+                    const u = new URL(window.location.href);
+                    u.searchParams.delete("preview_id");
+                    window.history.replaceState({}, "", u.pathname + u.search);
+                }
             } else if (savedCount > 0) {
                 setSaved(true);
                 toast.success(`Uloženo ${savedCount} tiketů.`);
+                if (previewId && typeof window !== "undefined") {
+                    const u = new URL(window.location.href);
+                    u.searchParams.delete("preview_id");
+                    window.history.replaceState({}, "", u.pathname + u.search);
+                }
                 if (totalInvalid > 0) toast.error(`Počet chyb: ${totalInvalid}. Zkontrolujte zvýrazněné řádky.`);
             } else {
                 toast.error(`Žádný tiket nebyl uložen. Opravte chyby (sport, vklad, kurz) a zkuste znovu.`);
@@ -416,6 +459,17 @@ export default function ImportPage() {
                     ✏️ Přidat ručně
                 </button>
             </div>
+
+            {previewError && (
+                <div style={{ marginBottom: 16, padding: 12, borderRadius: 8, background: "var(--color-red-soft)", color: "var(--color-red)", fontSize: "0.9rem" }}>
+                    {previewError}
+                </div>
+            )}
+            {previewId && parsedTickets.length > 0 && !previewError && (
+                <div style={{ marginBottom: 16, padding: 12, borderRadius: 8, background: "var(--color-accent-soft)", color: "var(--color-accent)", fontSize: "0.9rem" }}>
+                    Tikety z extension – zkontrolujte a uložte.
+                </div>
+            )}
 
             {/* Výběr zdroje OCR */}
             <div style={{ marginBottom: 16, display: "flex", gap: 16, alignItems: "center", background: "var(--color-bg-card)", padding: "12px 16px", borderRadius: 12, border: "1px solid var(--color-border)" }}>
@@ -957,5 +1011,13 @@ function TicketForm({ ticket: t, index: i, sports, allMarketTypes, topMarketType
                 </div>
             )}
         </div>
+    );
+}
+
+export default function ImportPage() {
+    return (
+        <Suspense fallback={<div style={{ padding: 24, textAlign: "center", color: "var(--color-text-muted)" }}>Načítání…</div>}>
+            <ImportPageContent />
+        </Suspense>
     );
 }

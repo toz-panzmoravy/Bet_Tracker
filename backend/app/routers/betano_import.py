@@ -15,9 +15,12 @@ from app.schemas import (
     BetanoScrapeResponse,
     BetanoScrapeResultItem,
     BetanoScrapeTicketIn,
+    BetanoScrapePreviewResponse,
+    ScrapePreviewTicket,
 )
 from app.routers.tickets import create_ticket as _create_ticket
 from app.routers.tickets import update_ticket as _update_ticket
+from app.preview_store import create_preview_id, set_preview
 
 
 router = APIRouter(prefix="/api/import/betano", tags=["Import – Betano"])
@@ -239,6 +242,60 @@ def _find_duplicate(
     )
 
     return fallback_query.first()
+
+
+def _ticket_create_to_preview_betano(db: Session, data: TicketCreate) -> ScrapePreviewTicket:
+    sport = db.query(Sport).filter(Sport.id == data.sport_id).first()
+    sport_name = sport.name if sport else "Neznámý"
+    event_date_str = data.event_date.isoformat() if data.event_date else None
+    return ScrapePreviewTicket(
+        home_team=data.home_team,
+        away_team=data.away_team,
+        sport_id=data.sport_id,
+        sport_name=sport_name,
+        market_label=data.market_label,
+        selection=data.selection,
+        odds=data.odds,
+        stake=data.stake,
+        payout=data.payout,
+        status=data.status,
+        bookmaker_id=data.bookmaker_id,
+        ticket_type=data.ticket_type,
+        event_date=event_date_str,
+    )
+
+
+@router.post("/scrape/preview", response_model=BetanoScrapePreviewResponse)
+def scrape_preview(
+    payload: BetanoScrapeRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Náhled importu: namapuje a vyfiltruje duplicity, nic neukládá.
+    Vrací preview_id a new_tickets; frontend načte GET /api/import/preview/{preview_id} a uloží.
+    """
+    betano_bookmaker_id = _get_betano_bookmaker_id(db)
+    new_tickets: List[ScrapePreviewTicket] = []
+    skipped_count = 0
+
+    for item in payload.tickets:
+        try:
+            data = _build_ticket_create(db, betano_bookmaker_id, item)
+            duplicate = _find_duplicate(db, betano_bookmaker_id, data, item.betano_key)
+            if duplicate:
+                skipped_count += 1
+                continue
+            new_tickets.append(_ticket_create_to_preview_betano(db, data))
+        except (SQLAlchemyError, ValueError):
+            continue
+
+    preview_id = create_preview_id()
+    set_preview(preview_id, [t.model_dump(mode="json") for t in new_tickets])
+    return BetanoScrapePreviewResponse(
+        preview_id=preview_id,
+        new_tickets=new_tickets,
+        skipped_count=skipped_count,
+    )
 
 
 @router.post("/scrape", response_model=BetanoScrapeResponse)

@@ -15,9 +15,13 @@ export default function NastaveniPage() {
   const [bankrollSaving, setBankrollSaving] = useState(false);
   const [bankrollSavedAt, setBankrollSavedAt] = useState(null);
 
+  const [webhookUrl, setWebhookUrl] = useState("");
+  const [webhookSaving, setWebhookSaving] = useState(false);
+  const [webhookSavedAt, setWebhookSavedAt] = useState(null);
+
   useEffect(() => {
     checkOllama();
-    loadBankroll();
+    loadSettings();
   }, []);
 
   async function checkOllama() {
@@ -35,14 +39,17 @@ export default function NastaveniPage() {
     }
   }
 
-  async function loadBankroll() {
+  async function loadSettings() {
     try {
       const data = await getAppSettings();
       if (data?.bankroll != null) {
         setBankroll(String(data.bankroll));
       }
+      if (data?.webhook_url != null) {
+        setWebhookUrl(String(data.webhook_url));
+      }
     } catch {
-      // ignore – default empty bankroll
+      // ignore – default empty
     }
   }
 
@@ -103,6 +110,51 @@ export default function NastaveniPage() {
         {bankrollSavedAt && (
           <p style={{ marginTop: 8, fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
             Uloženo: {bankrollSavedAt.toLocaleString("cs-CZ")}
+          </p>
+        )}
+      </div>
+
+      {/* Notifikace / Webhook */}
+      <div className="glass-card" style={{ padding: "1.25rem", marginBottom: 16 }}>
+        <h2 style={{ fontSize: "0.95rem", fontWeight: 600, marginBottom: 8 }}>🔔 Notifikace</h2>
+        <p style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: 12 }}>
+          Při změně stavu live tiketu (např. zápas skončil) backend odešle POST na tuto URL s JSON tělem (event, ticket_id, message, bookmaker, score, result). Můžeš použít např. Telegram Bot API nebo vlastní webhook.
+        </p>
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault();
+            setWebhookSaving(true);
+            try {
+              await updateAppSettings({ webhook_url: webhookUrl.trim() || null });
+              setWebhookSavedAt(new Date());
+            } catch {
+              // ignore
+            } finally {
+              setWebhookSaving(false);
+            }
+          }}
+          style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}
+        >
+          <input
+            type="url"
+            className="input"
+            style={{ flex: "1 1 280px" }}
+            value={webhookUrl}
+            onChange={(e) => setWebhookUrl(e.target.value)}
+            placeholder="https://api.telegram.org/botTOKEN/sendMessage nebo jiná URL"
+          />
+          <button
+            type="submit"
+            className="btn btn-primary"
+            disabled={webhookSaving}
+            style={{ fontSize: "0.8rem" }}
+          >
+            {webhookSaving ? "Ukládám..." : "Uložit"}
+          </button>
+        </form>
+        {webhookSavedAt && (
+          <p style={{ marginTop: 8, fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+            Uloženo: {webhookSavedAt.toLocaleString("cs-CZ")}
           </p>
         )}
       </div>

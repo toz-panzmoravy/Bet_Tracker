@@ -4,7 +4,7 @@ from typing import Optional
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
-from sqlalchemy import case
+from sqlalchemy import case, or_, and_
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
@@ -83,6 +83,8 @@ def list_tickets(
     date_to: Optional[datetime] = None,
     odds_min: Optional[float] = None,
     odds_max: Optional[float] = None,
+    incomplete: Optional[str] = Query(None, description="Jen tikety k doplnění (neúplné údaje); předat 1 nebo true"),
+    active_or_live: Optional[str] = Query(None, description="Pro stránku LIVE: 1 nebo true = status=open OR is_live=true"),
     sort_by: str = Query(default="created_at"),
     sort_dir: str = Query(default="desc"),
     limit: int = Query(default=100, le=500),
@@ -92,10 +94,12 @@ def list_tickets(
     """Seznam tiketů s filtry, řazením a stránkováním. Při výchozím řazení jdou děti hned za rodičem (AKU)."""
     query = _tickets_query(
         db, sport_id=sport_id, league_id=league_id, bookmaker_id=bookmaker_id,
-        status=status, market_type_id=market_type_id,         parent_id=parent_id,
+        status=status, market_type_id=market_type_id, parent_id=parent_id,
         ticket_type=ticket_type,
         is_live=is_live, date_from=date_from, date_to=date_to,
         odds_min=odds_min, odds_max=odds_max,
+        incomplete=incomplete in ("1", "true", "True", True) if incomplete is not None else None,
+        active_or_live=active_or_live in (True, "1", "true", "True") if active_or_live is not None else None,
         sort_by=sort_by, sort_dir=sort_dir,
     )
     total = query.count()
@@ -105,8 +109,8 @@ def list_tickets(
 
 def _tickets_query(db: Session, sport_id=None, league_id=None, bookmaker_id=None, status=None,
                    market_type_id=None, parent_id=None, ticket_type=None, is_live=None, date_from=None, date_to=None,
-                   odds_min=None, odds_max=None, sort_by="created_at", sort_dir="desc"):
-    """Sdílený dotaz pro list_tickets a export."""
+                   odds_min=None, odds_max=None, incomplete=None, active_or_live=None, sort_by="created_at", sort_dir="desc"):
+    """Sdílený dotaz pro list_tickets a export. incomplete=True: jen tikety k doplnění. active_or_live=True: status=open OR is_live."""
     query = db.query(Ticket).options(
         joinedload(Ticket.bookmaker),
         joinedload(Ticket.sport),
@@ -115,12 +119,33 @@ def _tickets_query(db: Session, sport_id=None, league_id=None, bookmaker_id=None
     )
     if sport_id:
         query = query.filter(Ticket.sport_id == sport_id)
+    if active_or_live:
+        query = query.filter(or_(Ticket.status == TicketStatus.open, Ticket.is_live == True))
+    if incomplete:
+        ostatni_id = db.query(Sport.id).filter(Sport.name == "Ostatní").scalar()
+        sport_cond = Ticket.sport_id.is_(None)
+        if ostatni_id is not None:
+            sport_cond = or_(Ticket.sport_id.is_(None), Ticket.sport_id == ostatni_id)
+        query = query.filter(
+            or_(
+                sport_cond,
+                and_(
+                    Ticket.market_type_id.is_(None),
+                    or_(Ticket.market_label.is_(None), Ticket.market_label == ""),
+                ),
+                or_(Ticket.selection.is_(None), Ticket.selection == ""),
+            )
+        )
     if league_id:
         query = query.filter(Ticket.league_id == league_id)
     if bookmaker_id:
         query = query.filter(Ticket.bookmaker_id == bookmaker_id)
     if status:
-        query = query.filter(Ticket.status == status)
+        try:
+            status_enum = TicketStatus(status) if isinstance(status, str) else status
+            query = query.filter(Ticket.status == status_enum)
+        except ValueError:
+            pass
     if market_type_id:
         query = query.filter(Ticket.market_type_id == market_type_id)
     if parent_id is not None:

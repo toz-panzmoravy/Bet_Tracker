@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { getTickets, deleteTicket, updateTicket, getSports, getBookmakers, exportTicketsCsv } from "../lib/api";
 
@@ -24,6 +24,8 @@ function paramsToState(searchParams) {
     if (date_to) filters.date_to = date_to;
     const market_type_id = searchParams.get("market_type_id");
     if (market_type_id) filters.market_type_id = market_type_id;
+    const incomplete = searchParams.get("incomplete");
+    if (incomplete === "1" || incomplete === "true") filters.incomplete = true;
     const sort_by = searchParams.get("sort_by") || "created_at";
     const sort_dir = searchParams.get("sort_dir") || "desc";
     return { filters, sort_by: sort_by, sort_dir: sort_dir };
@@ -39,6 +41,7 @@ function stateToParams(filters, sortBy, sortDir) {
     if (filters.date_from) p.set("date_from", filters.date_from);
     if (filters.date_to) p.set("date_to", filters.date_to);
     if (filters.market_type_id) p.set("market_type_id", filters.market_type_id);
+    if (filters.incomplete) p.set("incomplete", "1");
     if (sortBy && sortBy !== "created_at") p.set("sort_by", sortBy);
     if (sortDir && sortDir !== "desc") p.set("sort_dir", sortDir);
     return p;
@@ -210,7 +213,7 @@ function EditTicketModal({ ticket, onClose, onSave, sports, bookmakers }) {
     );
 }
 
-export default function TiketyPage() {
+function TiketyPageContent() {
     const [tickets, setTickets] = useState([]);
     const [totalCount, setTotalCount] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -276,13 +279,9 @@ export default function TiketyPage() {
         if (!append) setLoading(true);
         else setLoadingMore(true);
         try {
-            const data = await getTickets({
-                ...filters,
-                sort_by: sortBy,
-                sort_dir: sortDir,
-                limit: TICKETS_PAGE_SIZE,
-                offset,
-            });
+            const params = { ...filters, sort_by: sortBy, sort_dir: sortDir, limit: TICKETS_PAGE_SIZE, offset };
+            if (filters.incomplete) params.incomplete = 1;
+            const data = await getTickets(params);
             const items = data.items ?? data;
             const total = data.total ?? items.length;
             setTotalCount(total);
@@ -466,6 +465,14 @@ export default function TiketyPage() {
                     value={filters.date_to || ""}
                     onChange={(e) => setFilters({ ...filters, date_to: e.target.value || undefined })}
                 />
+                <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.85rem", cursor: "pointer", whiteSpace: "nowrap" }}>
+                    <input
+                        type="checkbox"
+                        checked={!!filters.incomplete}
+                        onChange={(e) => setFilters({ ...filters, incomplete: e.target.checked || undefined })}
+                    />
+                    <span>Jen neúplné</span>
+                </label>
                 {Object.keys(filters).length > 0 && (
                     <button className="btn btn-ghost" onClick={() => setFilters({})}>✕ Reset</button>
                 )}
@@ -513,8 +520,16 @@ export default function TiketyPage() {
                             {tickets.map((t) => {
                                 const profit = Number(t.profit || 0);
                                 const isChild = t.parent_id != null;
+                                const isIncompleteRow = !!filters.incomplete;
+                                const rowStyle = {};
+                                if (isChild) {
+                                    rowStyle.background = "var(--color-bg-card)";
+                                }
+                                if (isIncompleteRow) {
+                                    rowStyle.borderLeft = "3px solid var(--color-yellow)";
+                                }
                                 return (
-                                    <tr key={t.id} style={isChild ? { background: "var(--color-bg-card)" } : undefined}>
+                                    <tr key={t.id} style={rowStyle}>
                                         <td style={{ whiteSpace: "nowrap", paddingLeft: isChild ? 28 : undefined }}>
                                             {isChild && <span style={{ marginRight: 6, color: "var(--color-text-muted)" }}>↳</span>}
                                             {t.created_at ? new Date(t.created_at).toLocaleDateString("cs-CZ") : "–"}
@@ -550,6 +565,18 @@ export default function TiketyPage() {
                                                         fontWeight: 600,
                                                     }}>
                                                         {t.ticket_type === "aku" ? "AKU" : "SÓLO"}
+                                                    </span>
+                                                )}
+                                                {isIncompleteRow && (
+                                                    <span style={{
+                                                        fontSize: "0.65rem",
+                                                        padding: "2px 6px",
+                                                        borderRadius: 4,
+                                                        background: "var(--color-yellow-soft)",
+                                                        color: "var(--color-yellow)",
+                                                        fontWeight: 600,
+                                                    }}>
+                                                        K&nbsp;doplnění
                                                     </span>
                                                 )}
                                             </div>
@@ -625,5 +652,13 @@ export default function TiketyPage() {
                 onCancel={() => setDeleteConfirmId(null)}
             />
         </div>
+    );
+}
+
+export default function TiketyPage() {
+    return (
+        <Suspense fallback={<TicketsSkeleton />}>
+            <TiketyPageContent />
+        </Suspense>
     );
 }

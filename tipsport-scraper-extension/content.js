@@ -7,6 +7,18 @@
     return /betano\.cz$/i.test(location.hostname) || /betano\.cz/i.test(location.hostname);
   }
 
+  function isTipsportMojeTikety() {
+    return /tipsport\.cz/i.test(location.hostname) && /muj-ucet\/moje-tikety/i.test(location.pathname);
+  }
+
+  function isTipsportTicketDetail() {
+    return /tipsport\.cz/i.test(location.hostname) && /\/tiket\?/i.test(location.search || "");
+  }
+
+  function isTipsportLiveZapas() {
+    return /tipsport\.cz/i.test(location.hostname) && /\/live\/zapas\//i.test(location.pathname);
+  }
+
   function createImportButton() {
     const existing = document.getElementById("bettracker-import-btn");
     if (existing) return existing;
@@ -36,6 +48,32 @@
       btn.style.background = "#2563eb";
     });
 
+    document.body.appendChild(btn);
+    return btn;
+  }
+
+  function createImportActiveButton() {
+    const existing = document.getElementById("bettracker-import-active-btn");
+    if (existing) return existing;
+    const btn = document.createElement("button");
+    btn.id = "bettracker-import-active-btn";
+    btn.textContent = "Importovat aktivní";
+    btn.style.position = "fixed";
+    btn.style.right = "16px";
+    btn.style.bottom = "56px";
+    btn.style.zIndex = "99999";
+    btn.style.padding = "10px 16px";
+    btn.style.borderRadius = "8px";
+    btn.style.border = "none";
+    btn.style.background = "#059669";
+    btn.style.color = "#ffffff";
+    btn.style.fontSize = "14px";
+    btn.style.fontWeight = "600";
+    btn.style.boxShadow = "0 6px 16px rgba(0,0,0,0.25)";
+    btn.style.cursor = "pointer";
+    btn.style.fontFamily = "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    btn.addEventListener("mouseenter", () => { btn.style.background = "#047857"; });
+    btn.addEventListener("mouseleave", () => { btn.style.background = "#059669"; });
     document.body.appendChild(btn);
     return btn;
   }
@@ -121,7 +159,10 @@
     const results = [];
 
     // Na Tipsportu je každý tiket jedna <a> s atributem data-atid="ticketListItem…"
-    const cards = document.querySelectorAll('a[data-atid^="ticketListItem"]');
+    let cards = document.querySelectorAll('a[data-atid^="ticketListItem"]');
+    if (cards.length === 0) {
+      cards = document.querySelectorAll('a[href*="/tiket?"]');
+    }
 
     cards.forEach((card) => {
       try {
@@ -227,6 +268,10 @@
           else status_raw = "open";
         }
 
+        // Live tiket: Tipsport zobrazuje <div class="sc-837f7f43-0 inDuKt">Live</div>
+        const liveEl = card.querySelector(".inDuKt");
+        const is_live = !!(liveEl && liveEl.textContent.trim() === "Live");
+
         const ticket = {
           home_team,
           away_team,
@@ -241,11 +286,22 @@
           stake: stake ?? 0,
           payout: payout,
           odds: odds,
-          placed_at: placed_at_iso
+          placed_at: placed_at_iso,
+          is_live
         };
 
-        // Minimální validace – bez týmu a vkladu nemá smysl
-        if (ticket.home_team && ticket.away_team && ticket.stake > 0) {
+        // Minimální validace – bez týmů tiket nebereme,
+        // ale i když se nepodaří přečíst vklad (stake == 0),
+        // tiket pošleme do backendu a v aplikaci se dá ručně dopočítat/uložit.
+        if (ticket.home_team && ticket.away_team) {
+          if (!ticket.stake || ticket.stake <= 0) {
+            console.warn(
+              "BetTracker Tipsport scraper – tiket bez rozpoznaného vkladu:",
+              home_team,
+              "-",
+              away_team
+            );
+          }
           results.push(ticket);
         }
       } catch (e) {
@@ -388,7 +444,8 @@
   // Společná komunikace s backendem
   // ──────────────────────────────────────────────
 
-  async function sendToApi(tickets, source) {
+  async function sendToApi(tickets, source, usePreview) {
+    if (usePreview === undefined) usePreview = true;
     const hasRuntime =
       typeof chrome !== "undefined" &&
       chrome &&
@@ -401,8 +458,8 @@
       const payload = { tickets: tickets || [] };
       const endpoint =
         source === "betano"
-          ? `${API_BASE}/import/betano/scrape`
-          : `${API_BASE}/import/tipsport/scrape`;
+          ? `${API_BASE}/import/betano/scrape${usePreview ? "/preview" : ""}`
+          : `${API_BASE}/import/tipsport/scrape${usePreview ? "/preview" : ""}`;
 
       try {
         const res = await fetch(endpoint, {
@@ -433,7 +490,8 @@
         {
           type: "bettracker-import-tickets",
           source,
-          tickets
+          tickets,
+          preview: usePreview !== false
         },
         (response) => {
           if (chrome.runtime.lastError) {
@@ -494,25 +552,155 @@
 
       const result = await sendToApi(tickets, source);
 
-      const msgLines = [
-        `Nalezeno tiketů: ${tickets.length}`,
-        `Uloženo nových: ${result.created ?? 0}`,
-        `Aktualizováno existujících: ${result.updated ?? 0}`,
-        `Přeskočeno (duplicitní): ${result.skipped ?? 0}`,
-        `Chyby: ${result.errors ?? 0}`
-      ];
-      alert("BetTracker – import z BetTracker extension\n\n" + msgLines.join("\n"));
+      const APP_BASE = "http://localhost:3000";
+      const newTickets = result.new_tickets || [];
+      const previewId = result.preview_id;
+      const skippedCount = result.skipped_count ?? 0;
+
+      if (newTickets.length === 0) {
+        alert(
+          "BetTracker – žádné nové tikety.\n\n" +
+            "Všechny tikety z této stránky již v aplikaci existují (přeskočeno: " +
+            skippedCount +
+            ")."
+        );
+        return;
+      }
+
+      const url = APP_BASE + "/import?preview_id=" + encodeURIComponent(previewId);
+      window.open(url, "_blank");
+      alert(
+        "BetTracker – náhled připraven.\n\n" +
+          "Nových tiketů: " +
+          newTickets.length +
+          ", přeskočeno (duplicity): " +
+          skippedCount +
+          ".\n\n" +
+          "V novém okně zkontrolujte tikety a uložte je."
+      );
     } catch (e) {
       console.error("BetTracker Tipsport import – chyba:", e);
       alert("BetTracker – import selhal: " + e.message);
     }
   }
 
-  function init() {
-    if (!isTipsportPage() && !isBetanoPage()) return;
-    const btn = createImportButton();
-    btn.addEventListener("click", handleImportClick);
+  async function handleImportActiveClick() {
+    if (!isTipsportPage() || !isTipsportMojeTikety()) return;
+    try {
+      const all = scrapeTipsportTicketsFromPage();
+      const openOnly = all.filter(function (t) {
+        const isOpen = t.status_raw === "open" || (t.status_raw && String(t.status_raw).toLowerCase() === "open");
+        const hasLiveTag = t.is_live === true;
+        return isOpen || hasLiveTag;
+      });
+      if (!openOnly.length) {
+        alert("BetTracker: Na stránce nebyly nalezeny žádné otevřené ani LIVE tikety. Zkontrolujte, že vidíte seznam tiketů a zkuste znovu.");
+        return;
+      }
+      // Plný import (bez preview): existující tikety se AKTUALIZUJÍ na status open + is_live, nové se vytvoří
+      const result = await sendToApi(openOnly, "tipsport", false);
+      const created = result.created ?? 0;
+      const updated = result.updated ?? 0;
+      const skipped = result.skipped ?? 0;
+      const errors = result.errors ?? 0;
+      const APP_BASE = "http://localhost:3000";
+      if (errors > 0) {
+        alert("BetTracker – import aktivních: " + created + " vytvořeno, " + updated + " aktualizováno, " + errors + " chyb.");
+      } else {
+        alert("BetTracker – aktivní tikety synchronizovány: " + created + " nových, " + updated + " aktualizováno. Otevírám LIVE.");
+      }
+      window.open(APP_BASE + "/live", "_blank");
+    } catch (e) {
+      console.error("BetTracker Import aktivní – chyba:", e);
+      alert("BetTracker – import aktivních selhal: " + e.message);
+    }
   }
+
+  function runTicketDetailLiveLink() {
+    if (!isTipsportTicketDetail()) return;
+    const params = new URLSearchParams(location.search);
+    const idu = params.get("idu");
+    const idb = params.get("idb");
+    const hash = params.get("hash");
+    const tipsportKey = [idu, idb, hash].filter(Boolean).join(":") || null;
+    setTimeout(function () {
+      const link = document.querySelector('a[data-atid="matchReferenceLink"]');
+      if (!link) return;
+      let href = link.getAttribute("href") || link.href || "";
+      if (href && !href.startsWith("http")) {
+        href = location.origin + (href.startsWith("/") ? href : "/" + href);
+      }
+      if (!href) return;
+      if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
+        chrome.runtime.sendMessage({
+          type: "bettracker-live-link",
+          tipsportKey: tipsportKey,
+          liveMatchUrl: href
+        });
+      }
+    }, 1500);
+  }
+
+  function sendLiveStateToBackend(tipsportMatchId, scrapedPayload) {
+    if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
+      chrome.runtime.sendMessage({
+        type: "bettracker-live-state",
+        tipsportMatchId: tipsportMatchId,
+        liveMatchUrl: location.href,
+        scraped: scrapedPayload
+      });
+    }
+  }
+
+  function runLiveZapasScrape() {
+    if (!isTipsportLiveZapas()) return;
+    const match = location.pathname.match(/\/live\/zapas\/[^/]+\/(\d+)\/?$/);
+    const tipsportMatchId = match ? match[1] : null;
+    setTimeout(function () {
+      const useEl = document.querySelector('use[xlink\\:href="#i212"]') || document.querySelector('use[href="#i212"]');
+      if (useEl) {
+        const tab = useEl.closest("button") || useEl.closest("a") || useEl.closest("div");
+        if (tab) tab.click();
+      }
+    }, 800);
+    setTimeout(function () {
+      const scoreText = document.body ? document.body.innerText : "";
+      const fullText = scoreText.slice(0, 4000);
+      sendLiveStateToBackend(tipsportMatchId, { scoreText: scoreText.slice(0, 2000), fullText: fullText });
+    }, 2500);
+  }
+
+  function runLiveZapasScrapePeriodic() {
+    if (!isTipsportLiveZapas()) return;
+    const match = location.pathname.match(/\/live\/zapas\/[^/]+\/(\d+)\/?$/);
+    const tipsportMatchId = match ? match[1] : null;
+    const scoreText = document.body ? document.body.innerText : "";
+    const fullText = scoreText.slice(0, 4000);
+    sendLiveStateToBackend(tipsportMatchId, { scoreText: scoreText.slice(0, 2000), fullText: fullText });
+  }
+
+  function init() {
+    if (isTipsportPage() || isBetanoPage()) {
+      const btn = createImportButton();
+      btn.addEventListener("click", handleImportClick);
+      if (isTipsportMojeTikety()) {
+        const activeBtn = createImportActiveButton();
+        activeBtn.addEventListener("click", handleImportActiveClick);
+      }
+    }
+    if (isTipsportTicketDetail()) {
+      runTicketDetailLiveLink();
+    }
+    if (isTipsportLiveZapas()) {
+      runLiveZapasScrape();
+    }
+  }
+
+  chrome.runtime.onMessage.addListener(function (msg) {
+    if (msg && msg.type === "bettracker-live-tick") {
+      runLiveZapasScrapePeriodic();
+    }
+  });
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init);

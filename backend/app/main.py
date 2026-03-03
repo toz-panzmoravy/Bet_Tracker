@@ -11,7 +11,9 @@ from app.routers.market_types import router as market_types_router
 from app.routers.settings import router as settings_router
 from app.routers.tipsport_import import router as tipsport_import_router
 from app.routers.betano_import import router as betano_import_router
+from app.routers.import_preview import router as import_preview_router
 from app.routers.analytics import router as analytics_router
+from app.routers.live import router as live_router
 
 settings = get_settings()
 
@@ -40,7 +42,9 @@ app.include_router(market_types_router)
 app.include_router(settings_router)
 app.include_router(tipsport_import_router)
 app.include_router(betano_import_router)
+app.include_router(import_preview_router)
 app.include_router(analytics_router)
+app.include_router(live_router)
 
 
 @app.get("/")

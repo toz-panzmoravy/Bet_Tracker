@@ -681,3 +681,60 @@ async def check_ocr_health(unload: bool = False) -> bool:
             return settings.ollama_vision_model in models or f"{settings.ollama_vision_model}:latest" in models
     except Exception:
         return False
+
+
+async def evaluate_live_ticket_state(
+    market_label: str,
+    selection: str,
+    home_team: str,
+    away_team: str,
+    scraped_text: str,
+) -> dict:
+    """
+    Vyhodnotí stav live zápasu vůči sázce. Vstup: kontext tiketu + scraped text ze stránky.
+    Výstup: match_ended (bool), result ("won"|"lost"|None), message (str).
+    Při chybě nebo neplatném výstupu vrací match_ended=False, result=None, message="".
+    """
+    system_prompt = """Jsi asistent pro vyhodnocení sázkového tiketu. Dostaneš typ sázky, výběr uživatele a text ze stránky se živým zápasem (skóre, stav).
+Tvůj úkol:
+1) Rozhodni, zda zápas už skončil (v textu je finální skóre, zmínka o konci zápasu, "Konec", "Skončeno", "Zápas skončil", apod.).
+2) Pokud zápas skončil, urči podle typu sázky a výběru, zda tiket VYHRÁL (won) nebo PROHRÁL (lost). Např. výběr "nad 2.5 gólů" a finální skóre 3:1 = won.
+3) Napiš jednu krátkou větu pro notifikaci (např. "Zápas skončil 2:1, sázka vyšla.").
+
+Vrať POUZE validní JSON objekt s klíči: "match_ended" (boolean), "result" ("won" | "lost" | null), "message" (řetězec). Žádný úvodní text.
+Příklad: {"match_ended": true, "result": "won", "message": "Zápas skončil 2:1, sázka na výhru domácích vyšla."}
+Pokud zápas ještě nekončil, vrať: {"match_ended": false, "result": null, "message": ""}."""
+
+    prompt = f"""Typ sázky (market): {market_label or 'neuvedeno'}
+Výběr: {selection or 'neuvedeno'}
+Zápas: {home_team} - {away_team}
+
+Text ze stránky zápasu:
+---
+{scraped_text[:3000] if scraped_text else '(prázdný)'}
+---
+
+Vrať pouze JSON objekt s match_ended, result, message."""
+
+    try:
+        raw = await _ollama_generate(
+            settings.ollama_text_model,
+            prompt,
+            system=system_prompt,
+            num_predict=256,
+        )
+        # Parse JSON from response
+        clean = re.sub(r"```(?:json)?\s*([\s\S]*?)```", r"\1", raw).strip()
+        obj_match = re.search(r"\{[\s\S]*\}", clean)
+        if not obj_match:
+            return {"match_ended": False, "result": None, "message": ""}
+        obj = json.loads(obj_match.group())
+        match_ended = bool(obj.get("match_ended"))
+        result = obj.get("result")
+        if result not in ("won", "lost"):
+            result = None
+        message = str(obj.get("message", "") or "").strip()
+        return {"match_ended": match_ended, "result": result, "message": message}
+    except Exception as e:
+        logger.warning(f"evaluate_live_ticket_state parse error: {e}")
+        return {"match_ended": False, "result": None, "message": ""}

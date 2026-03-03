@@ -137,6 +137,10 @@ class TicketOut(BaseModel):
     source: str
     created_at: Optional[datetime] = None
     settled_at: Optional[datetime] = None
+    live_match_url: Optional[str] = None
+    tipsport_match_id: Optional[str] = None
+    last_live_at: Optional[datetime] = None
+    last_live_snapshot: Optional[dict] = None
 
     # Nested
     bookmaker: Optional[BookmakerOut] = None
@@ -212,10 +216,16 @@ class StatsOverview(BaseModel):
 
 class AppSettingsOut(BaseModel):
     bankroll: Decimal | None = None
+    webhook_url: Optional[str] = None
+    telegram_bot_token: Optional[str] = None
+    telegram_chat_id: Optional[str] = None
 
 
 class AppSettingsUpdate(BaseModel):
     bankroll: Decimal | None = None
+    webhook_url: Optional[str] = None
+    telegram_bot_token: Optional[str] = None
+    telegram_chat_id: Optional[str] = None
 
 
 # ─── AI ──────────────────────────────────────────────────
@@ -286,6 +296,7 @@ class TipsportScrapeTicketIn(BaseModel):
     payout: Optional[Decimal] = None
     odds: Optional[Decimal] = None
     placed_at: Optional[datetime] = None       # datum/čas podaní tiketu, pokud ho scrapper umí vytáhnout
+    is_live: Optional[bool] = False            # True pokud tiket obsahuje Live (běžící zápas)
 
 
 class TipsportScrapeRequest(BaseModel):
@@ -305,6 +316,30 @@ class TipsportScrapeResponse(BaseModel):
     skipped: int
     errors: int
     results: List[TipsportScrapeResultItem]
+
+
+class ScrapePreviewTicket(BaseModel):
+    """Jeden tiket pro náhled importu (frontend zobrazí a po úpravě uloží)."""
+    home_team: str
+    away_team: str
+    sport_id: int
+    sport_name: str
+    market_label: Optional[str] = None
+    selection: Optional[str] = None
+    odds: Decimal
+    stake: Decimal
+    payout: Optional[Decimal] = None
+    status: str
+    bookmaker_id: int
+    ticket_type: str = "solo"
+    event_date: Optional[str] = None  # ISO string pro JSON
+    is_live: bool = False
+
+
+class TipsportScrapePreviewResponse(BaseModel):
+    preview_id: str
+    new_tickets: List[ScrapePreviewTicket]
+    skipped_count: int
 
 
 # ─── Betano Scraper Import ──────────────────────────────────
@@ -348,6 +383,12 @@ class BetanoScrapeResponse(BaseModel):
     skipped: int
     errors: int
     results: List[BetanoScrapeResultItem]
+
+
+class BetanoScrapePreviewResponse(BaseModel):
+    preview_id: str
+    new_tickets: List[ScrapePreviewTicket]
+    skipped_count: int
 
 
 # ─── Analytics ─────────────────────────────────────────────
@@ -401,9 +442,40 @@ class AnalyticsTrendPoint(BaseModel):
     bets_count: int = 0
 
 
+class AnalyticsDayItem(BaseModel):
+    """Agregace podle dne v týdnu (0=pondělí … 6=neděle)."""
+    day_of_week: int
+    day_name: str
+    tickets_count: int = 0
+    won_count: int = 0
+    lost_count: int = 0
+    void_count: int = 0
+    stake: Decimal = Decimal("0")
+    profit: Decimal = Decimal("0")
+    roi_percent: float = 0.0
+    hitrate_percent: float = 0.0
+
+
 class AnalyticsSummary(BaseModel):
     """Odpověď endpointu /api/analytics/summary."""
     kpis: AnalyticsKpis
     by_sport: List[AnalyticsSportItem] = []
     by_market: List[AnalyticsMarketItem] = []
+    by_day_of_week: List[AnalyticsDayItem] = []
     profit_trend: List[AnalyticsTrendPoint] = []
+
+
+# ─── Live tracking ───────────────────────────────────────
+
+class LiveLinkIn(BaseModel):
+    """Payload od extension z detailu tiketu – propojení tiketu s URL live zápasu."""
+    tipsport_key: str  # idu:idb:hash z Tipsportu
+    live_match_url: str
+
+
+class LiveTicketStateIn(BaseModel):
+    """Payload od extension při odeslání scraped stavu live zápasu."""
+    ticket_id: Optional[int] = None
+    tipsport_match_id: Optional[str] = None
+    live_match_url: Optional[str] = None
+    scraped: Optional[dict] = None  # scoreText, fullText, etc.

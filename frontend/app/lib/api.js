@@ -78,6 +78,11 @@ export async function deleteTicket(id) {
   return fetchApi(`/tickets/${id}`, { method: "DELETE" });
 }
 
+/** Načte náhled importu (tikety z extension) pro preview_id. */
+export async function getImportPreview(previewId) {
+  return fetchApi(`/import/preview/${encodeURIComponent(previewId)}`);
+}
+
 /** Stáhne CSV export tiketů s danými filtry (bez limit/offset). */
 export async function exportTicketsCsv(params = {}) {
   const qs = new URLSearchParams();
