@@ -25,27 +25,79 @@
 
     const btn = document.createElement("button");
     btn.id = "bettracker-import-btn";
-    btn.textContent = "Import do BetTrackeru";
+
+    // Minimalistický vzhled: proužek uprostřed pod panelem záložek
     btn.style.position = "fixed";
-    btn.style.right = "16px";
-    btn.style.bottom = "16px";
+    btn.style.top = "10px";
+    btn.style.left = "50%";
+    btn.style.transform = "translateX(-50%)";
     btn.style.zIndex = "99999";
-    btn.style.padding = "10px 16px";
-    btn.style.borderRadius = "8px";
-    btn.style.border = "none";
-    btn.style.background = "#2563eb";
-    btn.style.color = "#ffffff";
-    btn.style.fontSize = "14px";
+    btn.style.padding = "6px 14px";
+    btn.style.borderRadius = "999px";
+    // Světlé pozadí kvůli čitelnosti loga
+    btn.style.border = "1px solid rgba(148,163,184,0.5)";
+    btn.style.backgroundImage = "linear-gradient(135deg, #ffffff, #f3e8ff)";
+    btn.style.color = "#4c1d95"; // tmavší fialová pro text
+    btn.style.fontSize = "12px";
     btn.style.fontWeight = "600";
-    btn.style.boxShadow = "0 6px 16px rgba(0,0,0,0.25)";
+    btn.style.boxShadow = "0 10px 30px rgba(0,0,0,0.35)";
     btn.style.cursor = "pointer";
-    btn.style.fontFamily = "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    btn.style.fontFamily =
+      "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    btn.style.display = "inline-flex";
+    btn.style.alignItems = "center";
+    btn.style.gap = "6px";
+    btn.style.backdropFilter = "blur(10px)";
+
+    // Ikona z rozšíření (logo BetTrackeru) – očekává se soubor logo-purple.png
+    // ve stejné složce jako manifest.json. Pokud tam není, zobrazí se jen text.
+    try {
+      const icon = document.createElement("span");
+      icon.style.display = "inline-block";
+      icon.style.width = "20px";
+      icon.style.height = "20px";
+      icon.style.borderRadius = "4px";
+      icon.style.backgroundImage = `url(${chrome.runtime.getURL("logo-purple.png")})`;
+      icon.style.backgroundSize = "cover";
+      icon.style.backgroundPosition = "center";
+      icon.style.backgroundRepeat = "no-repeat";
+      btn.appendChild(icon);
+    } catch (_) {
+      // ignore – fallback jen na text
+    }
+
+    const label = document.createElement("span");
+    label.textContent = "IMPORT";
+    label.style.letterSpacing = "0.08em";
+    label.style.textTransform = "uppercase";
+    btn.appendChild(label);
+
+    // Badge s počtem nových tiketů (fialové číslo u pravého dolního rohu)
+    const countBadge = document.createElement("span");
+    countBadge.id = "bettracker-import-count";
+    countBadge.textContent = "";
+    countBadge.style.position = "absolute";
+    countBadge.style.right = "-8px";
+    countBadge.style.bottom = "-6px";
+    countBadge.style.minWidth = "18px";
+    countBadge.style.height = "18px";
+    countBadge.style.borderRadius = "999px";
+    countBadge.style.padding = "0 4px";
+    countBadge.style.background = "#7c3aed";
+    countBadge.style.color = "#f9fafb";
+    countBadge.style.fontSize = "10px";
+    countBadge.style.fontWeight = "700";
+    countBadge.style.display = "none";
+    countBadge.style.alignItems = "center";
+    countBadge.style.justifyContent = "center";
+    countBadge.style.boxShadow = "0 4px 10px rgba(124,58,237,0.6)";
+    btn.appendChild(countBadge);
 
     btn.addEventListener("mouseenter", () => {
-      btn.style.background = "#1d4ed8";
+      btn.style.filter = "brightness(1.03)";
     });
     btn.addEventListener("mouseleave", () => {
-      btn.style.background = "#2563eb";
+      btn.style.filter = "none";
     });
 
     document.body.appendChild(btn);
@@ -57,23 +109,58 @@
     if (existing) return existing;
     const btn = document.createElement("button");
     btn.id = "bettracker-import-active-btn";
-    btn.textContent = "Importovat aktivní";
+
+    // Umístění vedle tlačítka IMPORT (vpravo)
     btn.style.position = "fixed";
-    btn.style.right = "16px";
-    btn.style.bottom = "56px";
+    btn.style.top = "10px";
+    // ještě menší mezera vedle IMPORT tlačítka
+    btn.style.left = "calc(50% + 80px)";
     btn.style.zIndex = "99999";
-    btn.style.padding = "10px 16px";
-    btn.style.borderRadius = "8px";
-    btn.style.border = "none";
-    btn.style.background = "#059669";
-    btn.style.color = "#ffffff";
-    btn.style.fontSize = "14px";
-    btn.style.fontWeight = "600";
-    btn.style.boxShadow = "0 6px 16px rgba(0,0,0,0.25)";
+    btn.style.padding = "6px 14px";
+    btn.style.borderRadius = "999px";
+    // Světlé pozadí pro lepší čitelnost červeného loga
+    btn.style.border = "1px solid rgba(248,113,113,0.6)";
+    btn.style.backgroundImage = "linear-gradient(135deg, #ffffff, #fee2e2)";
+    btn.style.color = "#b91c1c";
+    btn.style.fontSize = "12px";
+    btn.style.fontWeight = "700";
+    btn.style.boxShadow = "0 10px 30px rgba(0,0,0,0.35)";
     btn.style.cursor = "pointer";
-    btn.style.fontFamily = "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-    btn.addEventListener("mouseenter", () => { btn.style.background = "#047857"; });
-    btn.addEventListener("mouseleave", () => { btn.style.background = "#059669"; });
+    btn.style.fontFamily =
+      "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    btn.style.display = "inline-flex";
+    btn.style.alignItems = "center";
+    btn.style.gap = "6px";
+
+    // Ikona LIVE (červené logo)
+    try {
+      const icon = document.createElement("span");
+      icon.style.display = "inline-block";
+      icon.style.width = "20px";
+      icon.style.height = "20px";
+      icon.style.borderRadius = "4px";
+      icon.style.backgroundImage = `url(${chrome.runtime.getURL("redlive_v.png")})`;
+      icon.style.backgroundSize = "cover";
+      icon.style.backgroundPosition = "center";
+      icon.style.backgroundRepeat = "no-repeat";
+      btn.appendChild(icon);
+    } catch (_) {
+      // ignore – fallback jen na text
+    }
+
+    const label = document.createElement("span");
+    label.textContent = "LIVE";
+    label.style.letterSpacing = "0.12em";
+    label.style.textTransform = "uppercase";
+    btn.appendChild(label);
+
+    btn.addEventListener("mouseenter", () => {
+      btn.style.filter = "brightness(1.03)";
+    });
+    btn.addEventListener("mouseleave", () => {
+      btn.style.filter = "none";
+    });
+
     document.body.appendChild(btn);
     return btn;
   }
@@ -556,6 +643,22 @@
       const newTickets = result.new_tickets || [];
       const previewId = result.preview_id;
       const skippedCount = result.skipped_count ?? 0;
+
+      // Aktualizovat badge s počtem nových tiketů u tlačítka IMPORT
+      try {
+        const badge = document.getElementById("bettracker-import-count");
+        if (badge) {
+          if (newTickets.length > 0) {
+            badge.textContent = String(newTickets.length);
+            badge.style.display = "inline-flex";
+          } else {
+            badge.textContent = "";
+            badge.style.display = "none";
+          }
+        }
+      } catch (_) {
+        // ignore – UX vylepšení nesmí rozbít import
+      }
 
       if (newTickets.length === 0) {
         alert(

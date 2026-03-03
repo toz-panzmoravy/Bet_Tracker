@@ -16,6 +16,18 @@
   "background": {
     "service_worker": "background.js"
   },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "logo-purple.png",
+        "redlive_v.png"
+      ],
+      "matches": [
+        "*://*.tipsport.cz/*",
+        "*://*.betano.cz/*"
+      ]
+    }
+  ],
   "content_scripts": [
     {
       "matches": [
