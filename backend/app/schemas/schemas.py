@@ -245,8 +245,11 @@ class AiAnalysisOut(BaseModel):
     id: int
     created_at: Optional[datetime] = None
     context: Optional[dict] = None
+    aggregates: Optional[dict] = None
     model_name: Optional[str] = None
     response_text: Optional[str] = None
+    status: Optional[str] = None
+    error_message: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -296,7 +299,21 @@ class TipsportScrapeTicketIn(BaseModel):
     payout: Optional[Decimal] = None
     odds: Optional[Decimal] = None
     placed_at: Optional[datetime] = None       # datum/čas podaní tiketu, pokud ho scrapper umí vytáhnout
+    event_start_at: Optional[datetime] = None   # čas výkopu / začátku zápasu (z detailu tiketu); přednost před placed_at pro event_date
     is_live: Optional[bool] = False            # True pokud tiket obsahuje Live (běžící zápas)
+    legs: Optional[List["TipsportScrapeLegIn"]] = None  # AKU: nohy (zápasy), pokud extension načte rozbalený tiket
+
+
+class TipsportScrapeLegIn(BaseModel):
+    """Jedna noha AKU tiketu (zápas + výběr + kurz)."""
+    home_team: str
+    away_team: str
+    market_label_raw: Optional[str] = None
+    selection_raw: Optional[str] = None
+    odds: Optional[Decimal] = None
+
+
+TipsportScrapeTicketIn.model_rebuild()
 
 
 class TipsportScrapeRequest(BaseModel):
@@ -318,6 +335,15 @@ class TipsportScrapeResponse(BaseModel):
     results: List[TipsportScrapeResultItem]
 
 
+class ScrapePreviewLeg(BaseModel):
+    """Jedna noha AKU v náhledu."""
+    home_team: str
+    away_team: str
+    market_label: Optional[str] = None
+    selection: Optional[str] = None
+    odds: Decimal
+
+
 class ScrapePreviewTicket(BaseModel):
     """Jeden tiket pro náhled importu (frontend zobrazí a po úpravě uloží)."""
     home_team: str
@@ -334,6 +360,8 @@ class ScrapePreviewTicket(BaseModel):
     ticket_type: str = "solo"
     event_date: Optional[str] = None  # ISO string pro JSON
     is_live: bool = False
+    legs: Optional[List[ScrapePreviewLeg]] = None  # AKU: nohy pro vytvoření dětí po uložení
+    tipsport_key: Optional[str] = None  # pro extension: spárování s raw tiketem při ukládání z strip
 
 
 class TipsportScrapePreviewResponse(BaseModel):
@@ -364,6 +392,8 @@ class BetanoScrapeTicketIn(BaseModel):
     payout: Optional[Decimal] = None
     odds: Optional[Decimal] = None
     placed_at: Optional[datetime] = None        # datum/čas podaní tiketu
+    event_start_at: Optional[datetime] = None   # čas výkopu / začátku zápasu (ze sidebaru nebo karty); přednost před placed_at pro event_date
+    is_live: Optional[bool] = None              # True pokud je tiket označen jako Live na stránce Betano
 
 
 class BetanoScrapeRequest(BaseModel):
@@ -386,6 +416,53 @@ class BetanoScrapeResponse(BaseModel):
 
 
 class BetanoScrapePreviewResponse(BaseModel):
+    preview_id: str
+    new_tickets: List[ScrapePreviewTicket]
+    skipped_count: int
+
+
+# ─── Fortuna Scraper Import ─────────────────────────────────
+
+class FortunaScrapeTicketIn(BaseModel):
+    """
+    Vstup pro import z browser scrapperu (Fortuna ifortuna.cz).
+    Data z betslip history: zápas, vklad, kurz, výhra, status (Solo/Ako), popis sázky.
+    """
+    home_team: str
+    away_team: str
+    fortuna_key: Optional[str] = None       # href nebo datetime+teams+stake pro dedupe
+    market_label_raw: Optional[str] = None  # typ sázky (před dvojtečkou) nebo null u AKO
+    selection_raw: Optional[str] = None      # hodnota (za dvojtečkou), např. "Ano"
+    ticket_type_raw: Optional[str] = None   # "Solo" | "Ako"
+    status_raw: Optional[str] = None        # "won" | "lost" | "waiting" | "void"
+    stake: Decimal
+    payout: Optional[Decimal] = None
+    odds: Optional[Decimal] = None
+    placed_at: Optional[datetime] = None
+    event_start_at: Optional[datetime] = None   # čas výkopu; přednost před placed_at pro event_date
+    is_live: Optional[bool] = False
+
+
+class FortunaScrapeRequest(BaseModel):
+    tickets: List[FortunaScrapeTicketIn]
+
+
+class FortunaScrapeResultItem(BaseModel):
+    index: int
+    status: str
+    ticket_id: Optional[int] = None
+    message: Optional[str] = None
+
+
+class FortunaScrapeResponse(BaseModel):
+    created: int
+    updated: int
+    skipped: int
+    errors: int
+    results: List[FortunaScrapeResultItem]
+
+
+class FortunaScrapePreviewResponse(BaseModel):
     preview_id: str
     new_tickets: List[ScrapePreviewTicket]
     skipped_count: int

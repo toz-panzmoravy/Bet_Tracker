@@ -303,7 +303,7 @@ def _safe_ticket(item: dict) -> OcrParsedTicket:
         stake=safe_float(item.get("stake")),
         payout=payout,
         status=status,
-        is_live=bool(item.get("is_live", False)),
+        is_live=False,
         ticket_type=ticket_type,
     )
 
@@ -378,27 +378,52 @@ def _normalize_tipsport_selection_and_market(selection: str) -> tuple:
 
 
 async def analyze_stats(aggregates: dict, question: str = None) -> str:
-    """Odešle agregovaná data do textového modelu pro AI analýzu."""
+    """
+    Odešle agregovaná data (StatsOverview JSON) do textového modelu pro AI analýzu
+    s jasně daným, čistě datovým a statistickým rámcem.
+    """
 
-    system_context = """Jsi analytik sportovního sázení.
-Dostaneš statistická agregovaná data o sázkách jednoho sázkaře v JSONu.
-Pracuj pouze s těmito daty, nic si nevymýšlej.
-Identifikuj:
-1) silné stránky (kde je ROI vysoká / stabilní),
-2) slabiny a „leaky" (záporné ROI s velkým obratem),
-3) konkrétní doporučení: co omezit, co rozvinout, na co si dát pozor,
-4) případné upozornění na vysokou varianci.
-Piš stručně, česky, v několika odstavcích a s odrážkami tam, kde se to hodí."""
+    system_context = """Jsi datový analytik sportovního sázení.
+Dostaneš pouze agregovaná historická data o sázkách jednoho sázkaře v JSONu (StatsOverview).
+Tvůj úkol je STRIKTNĚ statistická meta-analýza toho, co se už stalo.
+
+KRITICKÁ PRAVIDLA:
+- PRACUJ JEN S DODANÝMI DATY. NIC SI NEDOMÝŠLEJ.
+- NEODHADUJ budoucí kurzy, zápasy, pravděpodobnosti ani výsledky.
+- NEPOUŽÍVEJ obecné fráze typu „mohl bys“, „pravděpodobně“, „doporučuji příště zkusit…“ bez opory v číslech.
+- Všechny závěry vždy opři o konkrétní metriky (ROI, profit, počet sázek, obrat).
+
+Data mají zhruba tento tvar:
+- overall: celkové statistiky (bets_count, roi_percent, profit_total, hit_rate_percent, max_drawdown, atd.)
+- by_sport: ROI/profit podle sportu (label = název sportu)
+- by_bookmaker: ROI/profit podle sázkovky
+- by_league: ROI/profit podle soutěže
+- by_market_type: ROI/profit podle typu sázky
+- by_odds_bucket: ROI/profit podle kurzových pásem
+- by_month: vývoj v čase po měsících.
+
+STRUKTURA ODPOVĚDI (česky):
+1) Shrnutí
+   - 2–3 věty, co říkají čísla celkově (např. jaká je ROI, jak moc je výsledek stabilní vs. variabilní).
+2) Pozitiva
+   - odrážky „+ …“ se silnými stránkami, vždy uveď segment (sport / trh / kurzové pásmo / sázkovka) + ROI, profit a počet sázek.
+3) Negativa
+   - odrážky „- …“ se slabými místy, znovu konkrétní segmenty a čísla.
+4) Rizika a variance
+   - stručně popiš drawdown, sérii proher/výher, citlivost na variance.
+5) Doporučení
+   - konkrétní, ale stále čistě datové tipy typu „omez trhy XY, kde máš dlouhodobě zápornou ROI při vysokém obratu“.
+
+Nikdy nepiš nic, co není přímo nebo nepřímo odvoditelné z čísel v JSONu."""
 
     prompt = f"""{system_context}
 
-Data:
+Data pro analýzu (StatsOverview v JSON):
 ```json
 {json.dumps(aggregates, indent=2, ensure_ascii=False, default=str)}
-```
-"""
+```"""
     if question:
-        prompt += f"\nDoplňující otázka od uživatele: {question}\n"
+        prompt += f"\n\nDoplňující otázka od uživatele (zohledni ji, ale stále pracuj jen s daty): {question}\n"
 
     return await _ollama_generate(settings.ollama_text_model, prompt, system=system_context)
 
@@ -478,7 +503,7 @@ Dostaneš JSON pole objektů (tikety). Tvůj úkol:
                         stake=corrected.stake if corrected.stake is not None else orig.stake,
                         payout=corrected.payout if corrected.payout is not None else orig.payout,
                         status=corrected.status or orig.status,
-                        is_live=corrected.is_live,
+                        is_live=False,
                         ticket_type=orig.ticket_type,
                     )
                 result.append(corrected)

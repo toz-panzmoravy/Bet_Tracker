@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BetTracker Overlay</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body style="background:#1a1b26;color:#c0caf5;margin:0;min-height:100vh;">
+  <div id="app">
+    <header class="header">
+      <h1 class="title">BetTracker</h1>
+      <div class="header-actions">
+        <label class="topmost-toggle">
+          <input type="checkbox" id="alwaysOnTop" /> Vždy navrch
+        </label>
+        <button type="button" id="btnSettings" title="Nastavení">⚙</button>
+        <button type="button" id="btnRefresh" title="Obnovit">↻</button>
+      </div>
+    </header>
+    <div id="error" class="error" hidden></div>
+    <section id="sectionUpcoming" class="section">
+      <h2 class="section-title">Vsazené – zápas nezačal</h2>
+      <ul id="listUpcoming" class="ticket-list"></ul>
+    </section>
+    <section id="sectionLive" class="section">
+      <h2 class="section-title">Právě hraje (live)</h2>
+      <ul id="listLive" class="ticket-list"></ul>
+    </section>
+    <section id="sectionOther" class="section">
+      <h2 class="section-title">Ostatní aktivní</h2>
+      <p class="section-hint">Tikety bez data výkopu nebo s datem v minulosti – zkuste znovu LIVE na stránce sázkové kanceláře.</p>
+      <ul id="listOther" class="ticket-list"></ul>
+    </section>
+    <div id="loading" class="loading">Načítám…</div>
+    <p id="dataHint" class="data-hint" hidden>Zobrazují se vsazené zápasy, které ještě nezačaly a nejsou vyhodnocené (všechny SK). V prohlížeči klikněte na tlačítko LIVE v extension.</p>
+  </div>
+  <div id="settingsModal" class="modal" hidden>
+    <div id="settingsModalBackdrop" class="modal-backdrop" title="Kliknutím zavřete"></div>
+    <div class="modal-content" id="settingsModalContent">
+      <div class="modal-header-row">
+        <h3>Nastavení</h3>
+        <a href="#" id="btnModalCloseX" class="modal-close-x" title="Zavřít (nebo Esc)" aria-label="Zavřít" role="button">×</a>
+      </div>
+      <label>URL API (BetTracker backend): <input type="text" id="apiUrl" value="http://127.0.0.1:8000/api" placeholder="http://127.0.0.1:8000/api" /></label>
+      <label>Interval obnovení (sekundy): <input type="number" id="refreshInterval" min="30" max="300" value="60" /></label>
+      <label>Zobrazit zápasy až X hodin dopředu: <input type="number" id="upcomingHours" min="1" max="168" value="24" /></label>
+      <p class="modal-hint">Zavřít: <kbd>Esc</kbd></p>
+      <div class="modal-actions">
+        <button type="button" id="btnSaveSettings">Uložit</button>
+        <button type="button" id="btnCloseSettings">Zavřít</button>
+      </div>
+    </div>
+  </div>
+  <script type="module" src="/main.js"></script>
+</body>
+</html>

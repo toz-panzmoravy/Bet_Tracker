@@ -1,8 +1,8 @@
- {
+{
   "manifest_version": 3,
   "name": "BetTracker Tipsport Import",
   "version": "0.1.0",
-  "description": "Scraper pro import tiketů z Tipsportu do BetTrackeru.",
+  "description": "Scraper pro import tiketů z Tipsportu, Betana a Fortuny do BetTrackeru.",
   "permissions": [
     "storage",
     "alarms",
@@ -11,28 +11,50 @@
   "host_permissions": [
     "*://*.tipsport.cz/*",
     "*://*.betano.cz/*",
+    "*://*.ifortuna.cz/*",
     "http://127.0.0.1:8000/*"
   ],
   "background": {
     "service_worker": "background.js"
   },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "BetTracker – nastavení"
+  },
+  "options_ui": {
+    "page": "options.html"
+  },
   "web_accessible_resources": [
     {
       "resources": [
         "logo-purple.png",
-        "redlive_v.png"
+        "redlive_v.png",
+        "upcoming-icon.png",
+        "future-match-icon.png",
+        "tipsport-logo.png",
+        "betano-logo.png"
       ],
       "matches": [
         "*://*.tipsport.cz/*",
         "*://*.betano.cz/*"
+      ]
+    },
+    {
+      "resources": [
+        "upcoming-icon.png",
+        "future-match-icon.png",
+        "tipsport-logo.png",
+        "betano-logo.png"
+      ],
+      "matches": [
+        "<all_urls>"
       ]
     }
   ],
   "content_scripts": [
     {
       "matches": [
-        "*://*.tipsport.cz/*",
-        "*://*.betano.cz/*"
+        "<all_urls>"
       ],
       "js": [
         "content.js"
@@ -41,4 +63,3 @@
     }
   ]
 }
-

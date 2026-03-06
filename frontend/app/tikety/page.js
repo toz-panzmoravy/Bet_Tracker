@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { getTickets, deleteTicket, updateTicket, getSports, getBookmakers, exportTicketsCsv } from "../lib/api";
+import { getTickets, deleteTicket, updateTicket, createTicket, getSports, getBookmakers, exportTicketsCsv } from "../lib/api";
 
 const TICKETS_PAGE_SIZE = 50;
 const FILTERS_STORAGE_KEY = "bettracker_tickets_filters";
@@ -16,8 +16,6 @@ function paramsToState(searchParams) {
     if (status) filters.status = status;
     const ticket_type = searchParams.get("ticket_type");
     if (ticket_type) filters.ticket_type = ticket_type;
-    const is_live = searchParams.get("is_live");
-    if (is_live !== null && is_live !== "") filters.is_live = is_live === "true";
     const date_from = searchParams.get("date_from");
     if (date_from) filters.date_from = date_from;
     const date_to = searchParams.get("date_to");
@@ -26,6 +24,8 @@ function paramsToState(searchParams) {
     if (market_type_id) filters.market_type_id = market_type_id;
     const incomplete = searchParams.get("incomplete");
     if (incomplete === "1" || incomplete === "true") filters.incomplete = true;
+    const search = searchParams.get("search");
+    if (search) filters.search = search;
     const sort_by = searchParams.get("sort_by") || "created_at";
     const sort_dir = searchParams.get("sort_dir") || "desc";
     return { filters, sort_by: sort_by, sort_dir: sort_dir };
@@ -37,11 +37,11 @@ function stateToParams(filters, sortBy, sortDir) {
     if (filters.sport_id) p.set("sport_id", filters.sport_id);
     if (filters.status) p.set("status", filters.status);
     if (filters.ticket_type) p.set("ticket_type", filters.ticket_type);
-    if (filters.is_live !== undefined && filters.is_live !== null) p.set("is_live", String(filters.is_live));
     if (filters.date_from) p.set("date_from", filters.date_from);
     if (filters.date_to) p.set("date_to", filters.date_to);
     if (filters.market_type_id) p.set("market_type_id", filters.market_type_id);
     if (filters.incomplete) p.set("incomplete", "1");
+    if (filters.search) p.set("search", filters.search);
     if (sortBy && sortBy !== "created_at") p.set("sort_by", sortBy);
     if (sortDir && sortDir !== "desc") p.set("sort_dir", sortDir);
     return p;
@@ -99,6 +99,181 @@ function InlineStatusSelect({ ticket, onUpdate }) {
                 </option>
             ))}
         </select>
+    );
+}
+
+function EditableNumberCell({ ticket, field, suffix = "", onSave }) {
+    const [editing, setEditing] = useState(false);
+    const [value, setValue] = useState(ticket[field] ?? "");
+    const [saving, setSaving] = useState(false);
+
+    useEffect(() => {
+        setValue(ticket[field] ?? "");
+    }, [ticket[field]]);
+
+    async function handleSave() {
+        const raw = value === "" ? null : Number(value);
+        if (raw === ticket[field]) {
+            setEditing(false);
+            return;
+        }
+        setSaving(true);
+        try {
+            await onSave(ticket.id, { [field]: raw });
+            setEditing(false);
+        } catch (_e) {
+            // toast se řeší v parentu přes onSave
+        } finally {
+            setSaving(false);
+        }
+    }
+
+    if (!editing) {
+        const display =
+            ticket[field] == null
+                ? "–"
+                : field === "stake"
+                    ? `${Number(ticket[field]).toLocaleString("cs-CZ")} ${suffix}`.trim()
+                    : Number(ticket[field]).toFixed(2);
+        return (
+            <span
+                style={{ cursor: "pointer" }}
+                onClick={() => setEditing(true)}
+                title="Klikni pro úpravu"
+            >
+                {display}
+            </span>
+        );
+    }
+
+    return (
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+            <input
+                type="number"
+                step={field === "odds" ? "0.01" : "1"}
+                className="input"
+                style={{ width: 90, padding: "4px 8px", fontSize: "0.8rem" }}
+                value={value === null ? "" : value}
+                onChange={(e) => setValue(e.target.value)}
+                disabled={saving}
+            />
+            <button
+                type="button"
+                className="btn btn-success"
+                style={{ padding: "4px 6px", fontSize: "0.75rem" }}
+                onClick={handleSave}
+                disabled={saving}
+            >
+                ✓
+            </button>
+            <button
+                type="button"
+                className="btn btn-ghost"
+                style={{ padding: "4px 6px", fontSize: "0.75rem" }}
+                onClick={() => {
+                    setValue(ticket[field] ?? "");
+                    setEditing(false);
+                }}
+                disabled={saving}
+            >
+                ✕
+            </button>
+        </span>
+    );
+}
+
+/* ─── Přidat sázku do AKU (inline formulář) ─────────────── */
+
+function AddAkuLegForm({ parent, sports, onSuccess, onCancel, onError }) {
+    const [loading, setLoading] = useState(false);
+    const [form, setForm] = useState({
+        sport_id: parent.sport_id ?? "",
+        home_team: "",
+        away_team: "",
+        market_label: "",
+        selection: "",
+        odds: "",
+        stake: parent.stake ? String(parent.stake) : "",
+        status: "open",
+    });
+
+    async function handleSubmit(e) {
+        e.preventDefault();
+        const sportId = form.sport_id ? Number(form.sport_id) : null;
+        const odds = form.odds ? Number(form.odds) : null;
+        const stake = form.stake ? Number(form.stake) : null;
+        if (!sportId || odds == null || stake == null) {
+            onError?.("Vyplň alespoň sport, kurz a vklad.");
+            return;
+        }
+        setLoading(true);
+        try {
+            await createTicket({
+                parent_id: parent.id,
+                bookmaker_id: parent.bookmaker_id ?? undefined,
+                sport_id: sportId,
+                home_team: (form.home_team || "").trim() || "-",
+                away_team: (form.away_team || "").trim() || "-",
+                market_label: (form.market_label || "").trim() || undefined,
+                selection: (form.selection || "").trim() || undefined,
+                odds,
+                stake,
+                status: form.status || "open",
+                ticket_type: "aku",
+            });
+            onSuccess?.();
+        } catch (err) {
+            onError?.(err?.message || "Nepodařilo se přidat sázku.");
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    return (
+        <tr>
+            <td colSpan={12} style={{ padding: "12px 16px", background: "var(--color-bg-card)", borderBottom: "1px solid var(--color-border)", verticalAlign: "top" }}>
+                <form onSubmit={handleSubmit} style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "flex-end", maxWidth: 900 }}>
+                    <div className="form-group" style={{ minWidth: 120 }}>
+                        <label style={{ fontSize: "0.7rem", color: "var(--color-text-muted)", display: "block", marginBottom: 2 }}>Sport</label>
+                        <select className="input" style={{ padding: "6px 10px", fontSize: "0.8rem" }} value={form.sport_id} onChange={e => setForm(f => ({ ...f, sport_id: e.target.value }))} required>
+                            {sports.map(s => <option key={s.id} value={s.id}>{s.icon} {s.name}</option>)}
+                        </select>
+                    </div>
+                    <div className="form-group" style={{ minWidth: 100 }}>
+                        <label style={{ fontSize: "0.7rem", color: "var(--color-text-muted)", display: "block", marginBottom: 2 }}>Domácí</label>
+                        <input className="input" style={{ padding: "6px 10px", fontSize: "0.8rem" }} placeholder="–" value={form.home_team} onChange={e => setForm(f => ({ ...f, home_team: e.target.value }))} />
+                    </div>
+                    <div className="form-group" style={{ minWidth: 100 }}>
+                        <label style={{ fontSize: "0.7rem", color: "var(--color-text-muted)", display: "block", marginBottom: 2 }}>Hosté</label>
+                        <input className="input" style={{ padding: "6px 10px", fontSize: "0.8rem" }} placeholder="–" value={form.away_team} onChange={e => setForm(f => ({ ...f, away_team: e.target.value }))} />
+                    </div>
+                    <div className="form-group" style={{ minWidth: 90 }}>
+                        <label style={{ fontSize: "0.7rem", color: "var(--color-text-muted)", display: "block", marginBottom: 2 }}>Typ sázky</label>
+                        <input className="input" style={{ padding: "6px 10px", fontSize: "0.8rem" }} placeholder="1X2" value={form.market_label} onChange={e => setForm(f => ({ ...f, market_label: e.target.value }))} />
+                    </div>
+                    <div className="form-group" style={{ minWidth: 100 }}>
+                        <label style={{ fontSize: "0.7rem", color: "var(--color-text-muted)", display: "block", marginBottom: 2 }}>Výběr</label>
+                        <input className="input" style={{ padding: "6px 10px", fontSize: "0.8rem" }} value={form.selection} onChange={e => setForm(f => ({ ...f, selection: e.target.value }))} />
+                    </div>
+                    <div className="form-group" style={{ width: 70 }}>
+                        <label style={{ fontSize: "0.7rem", color: "var(--color-text-muted)", display: "block", marginBottom: 2 }}>Kurz</label>
+                        <input type="number" step="0.01" className="input" style={{ padding: "6px 10px", fontSize: "0.8rem" }} value={form.odds} onChange={e => setForm(f => ({ ...f, odds: e.target.value }))} required />
+                    </div>
+                    <div className="form-group" style={{ width: 80 }}>
+                        <label style={{ fontSize: "0.7rem", color: "var(--color-text-muted)", display: "block", marginBottom: 2 }}>Vklad</label>
+                        <input type="number" className="input" style={{ padding: "6px 10px", fontSize: "0.8rem" }} value={form.stake} onChange={e => setForm(f => ({ ...f, stake: e.target.value }))} required />
+                    </div>
+                    <div className="form-group" style={{ minWidth: 100 }}>
+                        <label style={{ fontSize: "0.7rem", color: "var(--color-text-muted)", display: "block", marginBottom: 2 }}>Stav</label>
+                        <select className="input" style={{ padding: "6px 10px", fontSize: "0.8rem" }} value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>
+                            {STATUS_OPTIONS.map(s => <option key={s} value={s}>{STATUS_MAP[s].icon} {STATUS_MAP[s].label}</option>)}
+                        </select>
+                    </div>
+                    <button type="submit" className="btn btn-primary" style={{ padding: "8px 14px", fontSize: "0.8rem" }} disabled={loading}>{loading ? "Ukládám…" : "Přidat sázku"}</button>
+                    <button type="button" className="btn btn-ghost" style={{ padding: "8px 14px", fontSize: "0.8rem" }} onClick={() => onCancel?.()} disabled={loading}>Zrušit</button>
+                </form>
+            </td>
+        </tr>
     );
 }
 
@@ -223,12 +398,14 @@ function TiketyPageContent() {
     const [filters, setFilters] = useState({});
     const [sports, setSports] = useState([]);
     const [bookmakers, setBookmakers] = useState([]);
-    const [sortBy, setSortBy] = useState("event_date");
+    const [sortBy, setSortBy] = useState("created_at");
     const [sortDir, setSortDir] = useState("desc");
     const filtersInitialized = useRef(false);
     const [showConfetti, setShowConfetti] = useState(false);
     const [editingTicket, setEditingTicket] = useState(null);
     const [deleteConfirmId, setDeleteConfirmId] = useState(null);
+    const [expandedParents, setExpandedParents] = useState({});
+    const [addingLegToParentId, setAddingLegToParentId] = useState(null);
     const toast = useToast();
 
     useEffect(() => {
@@ -381,8 +558,222 @@ function TiketyPageContent() {
         return <span style={{ marginLeft: 4 }}>{sortDir === "desc" ? "↓" : "↑"}</span>;
     }
 
-    const totalProfit = tickets.reduce((sum, t) => sum + Number(t.profit || 0), 0);
-    const totalStake = tickets.reduce((sum, t) => sum + Number(t.stake || 0), 0);
+    // Do statistik počítáme jen sólové tikety a děti AKU (rodiče AKU ne – ti jsou jen „obal“)
+    const statsTickets = tickets.filter((t) => t.parent_id != null || t.ticket_type !== "aku");
+    const totalProfit = statsTickets.reduce((sum, t) => sum + Number(t.profit || 0), 0);
+    const totalStake = statsTickets.reduce((sum, t) => sum + Number(t.stake || 0), 0);
+
+    const childrenByParent = tickets.reduce((acc, t) => {
+        if (t.parent_id != null) {
+            if (!acc[t.parent_id]) acc[t.parent_id] = [];
+            acc[t.parent_id].push(t);
+        }
+        return acc;
+    }, {});
+
+    const parentTickets = tickets.filter((t) => t.parent_id == null);
+
+    /** Pro rodiče AKU: odvozené hodnoty z dětí (kombinovaný kurz = součin, status = musí vyjít všechny). */
+    function getAkuAggregate(children) {
+        if (!children?.length) return null;
+        const combinedOdds = children.reduce((acc, c) => acc * Number(c.odds || 1), 1);
+        const hasLost = children.some((c) => c.status === "lost" || c.status === "half_loss");
+        const hasOpen = children.some((c) => c.status === "open");
+        const allVoid = children.length > 0 && children.every((c) => c.status === "void");
+        const derivedStatus = hasLost ? "lost" : hasOpen ? "open" : allVoid ? "void" : "won";
+        return { combinedOdds, derivedStatus };
+    }
+
+    function renderTicketRow(t, { isChild, isAkuParent }) {
+        const children = isAkuParent ? (childrenByParent[t.id] || []) : [];
+        const akuAggregate = isAkuParent && children.length > 0 ? getAkuAggregate(children) : null;
+        const effectiveOdds = (akuAggregate && (t.odds != null && Number(t.odds) > 0))
+            ? Number(t.odds)
+            : (akuAggregate?.combinedOdds ?? 0);
+        const profit = Number(t.profit || 0);
+        const isIncompleteRow = !!filters.incomplete;
+        const rowStyle = {};
+
+        if (isAkuParent) {
+            rowStyle.background = "var(--color-bg-card-hover)";
+        } else if (isChild) {
+            rowStyle.background = "var(--color-bg-card)";
+        }
+        if (isIncompleteRow) {
+            rowStyle.borderLeft = "3px solid var(--color-yellow)";
+        }
+
+        const bookmakerStyle = t.bookmaker
+            ? {
+                fontSize: "0.75rem",
+                padding: "2px 6px",
+                borderRadius: "999px",
+                border: "1px solid var(--color-border-hover)",
+                color: "var(--color-text-secondary)",
+                fontWeight: 700,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                minWidth: "24px",
+                textAlign: "center",
+                background: t.bookmaker.name === "Tipsport"
+                    ? "rgba(59,130,246,0.15)"
+                    : t.bookmaker.name === "Betano"
+                        ? "rgba(249,115,22,0.15)"
+                        : "transparent",
+            }
+            : null;
+
+        const childCount = isAkuParent ? (childrenByParent[t.id]?.length || 0) : 0;
+
+        return (
+            <tr key={`${isChild ? "child" : "row"}-${t.id}`} style={rowStyle}>
+                <td style={{ whiteSpace: "nowrap", paddingLeft: isChild ? 28 : undefined }}>
+                    {isAkuParent && (
+                        <button
+                            type="button"
+                            onClick={() =>
+                                setExpandedParents((prev) => ({
+                                    ...prev,
+                                    [t.id]: !prev[t.id],
+                                }))
+                            }
+                            style={{
+                                marginRight: 6,
+                                cursor: "pointer",
+                                background: "transparent",
+                                border: "none",
+                                color: "var(--color-text-muted)",
+                                padding: 0,
+                            }}
+                            aria-label={expandedParents[t.id] ? "Skrýt pod-sázky" : "Zobrazit pod-sázky"}
+                        >
+                            {expandedParents[t.id] ? "▾" : "▸"}
+                        </button>
+                    )}
+                    {isChild && !isAkuParent && (
+                        <span style={{ marginRight: 6, color: "var(--color-text-muted)" }}>↳</span>
+                    )}
+                    {t.created_at ? new Date(t.created_at).toLocaleDateString("cs-CZ") : "–"}
+                </td>
+                <td>
+                    {t.bookmaker && (
+                        <span style={bookmakerStyle} title={t.bookmaker.name}>
+                            {(t.bookmaker.name || "?")[0]}
+                        </span>
+                    )}
+                </td>
+                <td>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, whiteSpace: "nowrap" }}>
+                        <span style={{ fontSize: "1.1rem" }}>{t.sport?.icon}</span>
+                        <span>{t.sport?.name || "–"}</span>
+                        {(t.ticket_type === "aku" || t.ticket_type === "solo") && !isChild && (
+                            <span style={{
+                                fontSize: "0.65rem",
+                                padding: "2px 5px",
+                                borderRadius: 4,
+                                background: t.ticket_type === "aku" ? "var(--color-accent-soft)" : "rgba(255,255,255,0.06)",
+                                color: t.ticket_type === "aku" ? "var(--color-accent)" : "var(--color-text-muted)",
+                                fontWeight: 600,
+                            }}>
+                                {t.ticket_type === "aku" ? "AKU" : "SÓLO"}
+                            </span>
+                        )}
+                        {isAkuParent && childCount > 0 && (
+                            <span style={{
+                                fontSize: "0.7rem",
+                                color: "var(--color-text-secondary)",
+                            }}>
+                                • {childCount} sázky
+                            </span>
+                        )}
+                        {isIncompleteRow && (
+                            <span style={{
+                                fontSize: "0.65rem",
+                                padding: "2px 6px",
+                                borderRadius: 4,
+                                background: "var(--color-yellow-soft)",
+                                color: "var(--color-yellow)",
+                                fontWeight: 600,
+                            }}>
+                                K&nbsp;doplnění
+                            </span>
+                        )}
+                    </div>
+                </td>
+                <td style={{ fontWeight: 500, paddingLeft: isChild ? 20 : undefined }}>
+                    {akuAggregate
+                        ? `AKU (${children.length} sázek)`
+                        : <>{t.home_team} – {t.away_team}</>
+                    }
+                </td>
+                <td style={{ color: "var(--color-text-secondary)" }}>
+                    {akuAggregate ? "Kombinace" : (t.market_label || t.market_type || "–")}
+                </td>
+                <td>{akuAggregate ? "–" : (t.selection || "–")}</td>
+                <td style={{ fontWeight: 600 }} title={akuAggregate ? "Celkový kurz AKU (lze upravit)" : undefined}>
+                    <EditableNumberCell ticket={t} field="odds" onSave={handleUpdateTicket} />
+                </td>
+                <td title={akuAggregate ? "Jeden vklad na celý AKU (lze upravit)" : undefined}>
+                    {isChild
+                        ? <span title="Vklad je jeden u celého AKU (u rodiče)">–</span>
+                        : <EditableNumberCell ticket={t} field="stake" suffix="Kč" onSave={handleUpdateTicket} />
+                    }
+                </td>
+                <td>
+                    {akuAggregate
+                        ? (akuAggregate.derivedStatus === "won" && t.stake != null && effectiveOdds > 0
+                            ? `${(Number(t.stake) * effectiveOdds).toLocaleString("cs-CZ")} Kč`
+                            : (akuAggregate.derivedStatus === "lost" || akuAggregate.derivedStatus === "half_loss")
+                                ? "0 Kč"
+                                : "–")
+                        : (t.payout ? `${Number(t.payout).toLocaleString("cs-CZ")} Kč` : "–")
+                    }
+                </td>
+                <td style={{
+                    fontWeight: 600,
+                    color: profit > 0 ? "var(--color-green)" : profit < 0 ? "var(--color-red)" : "var(--color-text-secondary)"
+                }}>
+                    {akuAggregate && t.stake != null
+                        ? (akuAggregate.derivedStatus === "won" && effectiveOdds > 0
+                            ? `+${(Number(t.stake) * (effectiveOdds - 1)).toLocaleString("cs-CZ")} Kč`
+                            : akuAggregate.derivedStatus === "lost" || akuAggregate.derivedStatus === "half_loss"
+                                ? `-${Number(t.stake).toLocaleString("cs-CZ")} Kč`
+                                : "–")
+                        : <>{profit > 0 ? "+" : ""}{profit.toLocaleString("cs-CZ")} Kč</>
+                    }
+                </td>
+                <td>
+                    {akuAggregate
+                        ? (
+                            <span
+                                className={`badge-${akuAggregate.derivedStatus === "won" || akuAggregate.derivedStatus === "half_win" ? "won" : akuAggregate.derivedStatus === "lost" || akuAggregate.derivedStatus === "half_loss" ? "lost" : akuAggregate.derivedStatus === "void" ? "void" : "open"}`}
+                                style={{ padding: "4px 10px", borderRadius: 20, fontSize: "0.75rem", fontWeight: 600 }}
+                                title="Odvozeno z výsledků všech sázek v AKU"
+                            >
+                                {STATUS_MAP[akuAggregate.derivedStatus]?.icon} {STATUS_MAP[akuAggregate.derivedStatus]?.label ?? akuAggregate.derivedStatus}
+                            </span>
+                        )
+                        : <InlineStatusSelect ticket={t} onUpdate={handleStatusUpdate} />
+                    }
+                </td>
+                <td style={{ whiteSpace: "nowrap" }}>
+                    <div style={{ display: "flex", gap: 6 }}>
+                        <button
+                            className="btn btn-ghost"
+                            style={{ padding: "4px 8px", fontSize: "0.8rem", border: "1px solid rgba(255,255,255,0.1)" }}
+                            onClick={() => setEditingTicket(t)}
+                        >✏️</button>
+                        <button
+                            className="btn btn-danger"
+                            style={{ padding: "4px 8px", fontSize: "0.8rem" }}
+                            onClick={() => handleDeleteClick(t.id)}
+                        >🗑</button>
+                    </div>
+                </td>
+            </tr>
+        );
+    }
 
     return (
         <div>
@@ -449,14 +840,6 @@ function TiketyPageContent() {
                     <option value="solo">SÓLO</option>
                     <option value="aku">AKU</option>
                 </select>
-                <select className="input" style={{ width: 140 }}
-                    value={filters.is_live ?? ""}
-                    onChange={(e) => setFilters({ ...filters, is_live: e.target.value === "" ? undefined : e.target.value === "true" })}
-                >
-                    <option value="">Live + Prematch</option>
-                    <option value="true">🔴 Live</option>
-                    <option value="false">📋 Prematch</option>
-                </select>
                 <input type="date" className="input" style={{ width: 150 }}
                     value={filters.date_from || ""}
                     onChange={(e) => setFilters({ ...filters, date_from: e.target.value || undefined })}
@@ -464,6 +847,14 @@ function TiketyPageContent() {
                 <input type="date" className="input" style={{ width: 150 }}
                     value={filters.date_to || ""}
                     onChange={(e) => setFilters({ ...filters, date_to: e.target.value || undefined })}
+                />
+                <input
+                    type="text"
+                    className="input"
+                    style={{ width: 220 }}
+                    placeholder="Hledat (tým, liga, trh, výběr)"
+                    value={filters.search || ""}
+                    onChange={(e) => setFilters({ ...filters, search: e.target.value || undefined })}
                 />
                 <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.85rem", cursor: "pointer", whiteSpace: "nowrap" }}>
                     <input
@@ -517,101 +908,48 @@ function TiketyPageContent() {
                             </tr>
                         </thead>
                         <tbody>
-                            {tickets.map((t) => {
-                                const profit = Number(t.profit || 0);
-                                const isChild = t.parent_id != null;
-                                const isIncompleteRow = !!filters.incomplete;
-                                const rowStyle = {};
-                                if (isChild) {
-                                    rowStyle.background = "var(--color-bg-card)";
+                            {parentTickets.map((t) => {
+                                const isAkuParent = t.ticket_type === "aku";
+                                const rows = [];
+                                rows.push(renderTicketRow(t, { isChild: false, isAkuParent }));
+                                if (isAkuParent && expandedParents[t.id]) {
+                                    const children = childrenByParent[t.id] || [];
+                                    children.forEach((child) => {
+                                        rows.push(renderTicketRow(child, { isChild: true, isAkuParent: false }));
+                                    });
+                                    if (addingLegToParentId === t.id) {
+                                        rows.push(
+                                            <AddAkuLegForm
+                                                key={`add-leg-${t.id}`}
+                                                parent={t}
+                                                sports={sports}
+                                                onSuccess={async () => {
+                                                    await loadTickets(false);
+                                                    setAddingLegToParentId(null);
+                                                    toast.success("Sázka přidána do AKU");
+                                                }}
+                                                onCancel={() => setAddingLegToParentId(null)}
+                                                onError={(msg) => toast.error(msg)}
+                                            />
+                                        );
+                                    } else {
+                                        rows.push(
+                                            <tr key={`add-leg-btn-${t.id}`}>
+                                                <td colSpan={12} style={{ padding: "8px 16px", background: "var(--color-bg-card)", borderBottom: "1px solid var(--color-border)" }}>
+                                                    <button
+                                                        type="button"
+                                                        className="btn btn-ghost"
+                                                        style={{ fontSize: "0.85rem", padding: "6px 12px", border: "1px dashed rgba(255,255,255,0.2)" }}
+                                                        onClick={() => setAddingLegToParentId(t.id)}
+                                                    >
+                                                        ➕ Přidat sázku do AKU
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        );
+                                    }
                                 }
-                                if (isIncompleteRow) {
-                                    rowStyle.borderLeft = "3px solid var(--color-yellow)";
-                                }
-                                return (
-                                    <tr key={t.id} style={rowStyle}>
-                                        <td style={{ whiteSpace: "nowrap", paddingLeft: isChild ? 28 : undefined }}>
-                                            {isChild && <span style={{ marginRight: 6, color: "var(--color-text-muted)" }}>↳</span>}
-                                            {t.created_at ? new Date(t.created_at).toLocaleDateString("cs-CZ") : "–"}
-                                        </td>
-                                        <td>
-                                            {t.bookmaker ? (
-                                                <span style={{
-                                                    fontSize: "0.75rem",
-                                                    padding: "2px 6px",
-                                                    borderRadius: "4px",
-                                                    border: `1.5px solid ${t.bookmaker.name === 'Tipsport' ? '#3498db' : t.bookmaker.name === 'Betano' ? '#ff7000' : 'var(--color-border-hover)'}`,
-                                                    color: t.bookmaker.name === 'Tipsport' ? '#3498db' : t.bookmaker.name === 'Betano' ? '#ff7000' : 'var(--color-text-secondary)',
-                                                    fontWeight: 800,
-                                                    display: "inline-block",
-                                                    minWidth: "20px",
-                                                    textAlign: "center"
-                                                }} title={t.bookmaker.name}>
-                                                    {(t.bookmaker.name || "?")[0]}
-                                                </span>
-                                            ) : null}
-                                        </td>
-                                        <td>
-                                            <div style={{ display: "flex", alignItems: "center", gap: 8, whiteSpace: "nowrap" }}>
-                                                <span style={{ fontSize: "1.1rem" }}>{t.sport?.icon}</span>
-                                                <span>{t.sport?.name || "–"}</span>
-                                                {(t.ticket_type === "aku" || t.ticket_type === "solo") && (
-                                                    <span style={{
-                                                        fontSize: "0.65rem",
-                                                        padding: "2px 5px",
-                                                        borderRadius: 4,
-                                                        background: t.ticket_type === "aku" ? "var(--color-accent-soft)" : "rgba(255,255,255,0.06)",
-                                                        color: t.ticket_type === "aku" ? "var(--color-accent)" : "var(--color-text-muted)",
-                                                        fontWeight: 600,
-                                                    }}>
-                                                        {t.ticket_type === "aku" ? "AKU" : "SÓLO"}
-                                                    </span>
-                                                )}
-                                                {isIncompleteRow && (
-                                                    <span style={{
-                                                        fontSize: "0.65rem",
-                                                        padding: "2px 6px",
-                                                        borderRadius: 4,
-                                                        background: "var(--color-yellow-soft)",
-                                                        color: "var(--color-yellow)",
-                                                        fontWeight: 600,
-                                                    }}>
-                                                        K&nbsp;doplnění
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </td>
-                                        <td style={{ fontWeight: 500, paddingLeft: isChild ? 20 : undefined }}>
-                                            {t.home_team} – {t.away_team}
-                                            {t.is_live && <span style={{ marginLeft: 6, fontSize: "0.7rem", background: "var(--color-red-soft)", color: "var(--color-red)", padding: "2px 6px", borderRadius: 6 }}>LIVE</span>}
-                                        </td>
-                                        <td style={{ color: "var(--color-text-secondary)" }}>{t.market_label || t.market_type || "–"}</td>
-                                        <td>{t.selection || "–"}</td>
-                                        <td style={{ fontWeight: 600 }}>{Number(t.odds).toFixed(2)}</td>
-                                        <td>{Number(t.stake).toLocaleString("cs-CZ")} Kč</td>
-                                        <td>{t.payout ? `${Number(t.payout).toLocaleString("cs-CZ")} Kč` : "–"}</td>
-                                        <td style={{ fontWeight: 600, color: profit > 0 ? "var(--color-green)" : profit < 0 ? "var(--color-red)" : "var(--color-text-secondary)" }}>
-                                            {profit > 0 ? "+" : ""}{profit.toLocaleString("cs-CZ")} Kč
-                                        </td>
-                                        <td>
-                                            <InlineStatusSelect ticket={t} onUpdate={handleStatusUpdate} />
-                                        </td>
-                                        <td style={{ whiteSpace: "nowrap" }}>
-                                            <div style={{ display: "flex", gap: 6 }}>
-                                                <button
-                                                    className="btn btn-ghost"
-                                                    style={{ padding: "4px 8px", fontSize: "0.8rem", border: "1px solid rgba(255,255,255,0.1)" }}
-                                                    onClick={() => setEditingTicket(t)}
-                                                >✏️</button>
-                                                <button
-                                                    className="btn btn-danger"
-                                                    style={{ padding: "4px 8px", fontSize: "0.8rem" }}
-                                                    onClick={() => handleDeleteClick(t.id)}
-                                                >🗑</button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                );
+                                return rows;
                             })}
                         </tbody>
                     </table>

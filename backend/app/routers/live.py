@@ -92,7 +92,13 @@ async def post_live_state(data: LiveTicketStateIn, db: Session = Depends(get_db)
         if not ticket:
             ticket = db.query(Ticket).filter(Ticket.live_match_url == data.live_match_url).first()
     if not ticket:
-        raise HTTPException(status_code=404, detail="Tiket nenalezen (ticket_id nebo tipsport_match_id)")
+        # Extension posílá stav i pro zápasy, které v DB nemáme (uživatel otevřel live stránku bez propojeného tiketu).
+        # Vrátíme 200 s ok: False, aby extension nedostala 404 a nepřetěžovala backend opakovanými pokusy.
+        return {
+            "ok": False,
+            "ticket_id": None,
+            "detail": "Tiket nenalezen (ticket_id nebo tipsport_match_id). Propojte tiket přes detail tiketu na Tipsportu.",
+        }
 
     # Uložit live_match_url a tipsport_match_id na tiket při prvním příjmu
     if data.live_match_url:

@@ -79,6 +79,8 @@ class MarketType(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), nullable=False, unique=True)
+    # Kanonický tvar názvu pro deduplikaci ("Počet bodů v zápase" -> "pocet bodu").
+    normalized_name = Column(String(120), nullable=True, index=True)
     description = Column(String(500), nullable=True)
     is_active = Column(Boolean, default=True)
 
@@ -149,10 +151,12 @@ class AiAnalysis(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow)
-    context = Column(JSON, nullable=True)         # použité filtry
+    context = Column(JSON, nullable=True)          # použité filtry / metadata
     aggregates = Column(JSON, nullable=True)       # co se poslalo modelu
     model_name = Column(String(100), nullable=True)
     response_text = Column(Text, nullable=True)
+    status = Column(String(20), nullable=True)     # pending | running | done | error
+    error_message = Column(Text, nullable=True)
 
 
 class AppSettings(Base):

@@ -1,10 +1,20 @@
 "use client";
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Cell, Legend, LabelList
 } from "recharts";
-import { getStatsOverview, getTimeseries, aiAnalyze, getAiAnalyses, getSports, getBookmakers, getAppSettings } from "./lib/api";
+import {
+  getStatsOverview,
+  getTimeseries,
+  aiAnalyze,
+  getAiAnalyses,
+  getSports,
+  getBookmakers,
+  getAppSettings,
+  getMarketTypes,
+} from "./lib/api";
 import { useToast } from "./components/Toast";
 import { DashboardSkeleton } from "./components/Skeletons";
 import Confetti from "./components/Confetti";
@@ -100,8 +110,18 @@ function RoiBarChart({
   negativeColor = "#ef4444",
   colorMap = null,
   highlightBest = false,
+  onBarClick,
+  emptyHasFilters = false,
+  emptyOnReset,
 }) {
-  if (!data?.length) return <EmptyState />;
+  if (!data?.length) {
+    return (
+      <EmptyState
+        hasFilters={emptyHasFilters}
+        onResetFilters={emptyOnReset}
+      />
+    );
+  }
 
   // Najdeme nejlepší řádek podle ROI pro zvýraznění sloupcem
   const best =
@@ -137,10 +157,12 @@ function RoiBarChart({
             return (
               <Cell
                 key={i}
+                cursor={onBarClick ? "pointer" : "default"}
                 fill={fill}
                 fillOpacity={isBest ? 1 : 0.85}
                 stroke={isBest ? "#e5e7eb" : "none"}
                 strokeWidth={isBest ? 1.5 : 0}
+                onClick={onBarClick ? () => onBarClick(entry) : undefined}
               />
             );
           })}
@@ -166,10 +188,44 @@ function ChartCard({ title, subtitle, children }) {
 
 /* ─── Empty State ──────────────────────────────────────── */
 
+function EmptyState({ hasFilters = false, onResetFilters }) {
+  const hasReset = hasFilters && typeof onResetFilters === "function";
+  return (
+    <div style={{ textAlign: "center", padding: "3rem 0", color: "var(--color-text-muted)" }}>
+      <p style={{ fontSize: "2.5rem", marginBottom: 8, opacity: 0.4 }}>📊</p>
+      <p style={{ fontSize: "0.85rem" }}>
+        {hasFilters ? "Žádná data pro zvolený rozsah filtrů" : "Žádná data k zobrazení"}
+      </p>
+      <p style={{ fontSize: "0.7rem", marginTop: 4 }}>
+        {hasFilters
+          ? "Zkus rozšířit období nebo zrušit filtry."
+          : "Přidej tikety přes Import."}
+      </p>
+      {hasReset && (
+        <button
+          type="button"
+          className="btn btn-ghost"
+          style={{ marginTop: 12, fontSize: "0.8rem" }}
+          onClick={onResetFilters}
+        >
+          ✕ Zrušit filtry
+        </button>
+      )}
+    </div>
+  );
+}
+
 /* ─── Monthly Stats Table ──────────────────────────────── */
 
-function MonthlyStatsTable({ data }) {
-  if (!data?.length) return <EmptyState />;
+function MonthlyStatsTable({ data, emptyHasFilters = false, emptyOnReset }) {
+  if (!data?.length) {
+    return (
+      <EmptyState
+        hasFilters={emptyHasFilters}
+        onResetFilters={emptyOnReset}
+      />
+    );
+  }
   return (
     <div className="glass-card" style={{ padding: "1.25rem", overflow: "auto" }}>
       <h3 style={{ fontSize: "0.9rem", fontWeight: 600, marginBottom: 16 }}>📅 Měsíční přehled</h3>
@@ -207,16 +263,6 @@ function MonthlyStatsTable({ data }) {
           })}
         </tbody>
       </table>
-    </div>
-  );
-}
-
-function EmptyState() {
-  return (
-    <div style={{ textAlign: "center", padding: "3rem 0", color: "var(--color-text-muted)" }}>
-      <p style={{ fontSize: "2.5rem", marginBottom: 8, opacity: 0.4 }}>📊</p>
-      <p style={{ fontSize: "0.85rem" }}>Žádná data k zobrazení</p>
-      <p style={{ fontSize: "0.7rem", marginTop: 4 }}>Přidej tikety přes Import</p>
     </div>
   );
 }
@@ -497,6 +543,9 @@ export default function Dashboard() {
   const [showAiHistoryModal, setShowAiHistoryModal] = useState(false);
   const [aiHistoryList, setAiHistoryList] = useState([]);
   const [aiHistoryDetail, setAiHistoryDetail] = useState(null);
+  const [marketTypes, setMarketTypes] = useState([]);
+  const [aiScope, setAiScope] = useState("overview");
+  const router = useRouter();
   const toast = useToast();
 
   useEffect(() => {
@@ -504,6 +553,7 @@ export default function Dashboard() {
     getSports().then(setSports).catch(() => { });
     getBookmakers().then(setBookmakers).catch(() => { });
     getAppSettings().then((data) => setBankroll(data?.bankroll ?? null)).catch(() => { });
+    getMarketTypes().then(setMarketTypes).catch(() => { });
   }, []);
 
   useEffect(() => {
@@ -537,7 +587,28 @@ export default function Dashboard() {
     setAiLoading(true);
     setShowAiModal(true);
     try {
-      const res = await aiAnalyze(filters);
+      const scope = aiScope || "overview";
+      let question = "";
+      if (scope === "markets") {
+        question =
+          "Zaměř se hlavně na typy sázek (by_market_type) a kurzová pásma (by_odds_bucket).";
+      } else if (scope === "sport" && filters?.sport_id) {
+        const sport = sports.find(
+          (s) => String(s.id) === String(filters.sport_id)
+        );
+        const sportName = sport?.name || "vybraný sport";
+        question = `Zaměř se hlavně na sport ${sportName} a porovnej ho s ostatními segmenty.`;
+      } else {
+        question =
+          "Zaměř se na celkový přehled – shrň ROI, celkový profit, hitrate a drawdown, a jasně odděl silné a slabé stránky.";
+      }
+
+      const effectiveFilters = {
+        ...filters,
+        _ai_scope: scope,
+      };
+
+      const res = await aiAnalyze(effectiveFilters, question);
       setAiResult(res.analysis_text);
       toast.success("AI analýza dokončena");
     } catch (e) {
@@ -564,8 +635,14 @@ export default function Dashboard() {
   const profitColor = (o.profit_total || 0) >= 0 ? "green" : "red";
 
   // Compute chart subtitles
-  const bestSport = stats?.by_sport?.reduce((best, s) => (!best || s.roi_percent > best.roi_percent) ? s : best, null);
-  const bestMarket = stats?.by_market_type?.reduce((best, s) => (!best || s.roi_percent > best.roi_percent) ? s : best, null);
+  const bestSport = stats?.by_sport?.reduce(
+    (best, s) => (!best || s.roi_percent > best.roi_percent ? s : best),
+    null
+  );
+  const bestMarket = stats?.by_market_type?.reduce(
+    (best, s) => (!best || s.roi_percent > best.roi_percent ? s : best),
+    null
+  );
 
   // Připravíme data pro ROI grafy: seřazeno a s minimálním počtem sázek, aby ROI z 1–2 tiketů nezkreslovalo
   function prepareGrouped(data, { minBets = 5, sortBy = "roi", limit = 10 } = {}) {
@@ -581,11 +658,240 @@ export default function Dashboard() {
     return sorted.slice(0, limit);
   }
 
-  const bySportPrepared = prepareGrouped(stats?.by_sport, { minBets: 5, sortBy: "roi", limit: 8 });
-  const byBookmakerPrepared = prepareGrouped(stats?.by_bookmaker, { minBets: 5, sortBy: "roi", limit: 8 });
-  const byLeaguePrepared = prepareGrouped(stats?.by_league, { minBets: 5, sortBy: "roi", limit: 12 });
-  const byMarketPrepared = prepareGrouped(stats?.by_market_type, { minBets: 5, sortBy: "roi", limit: 12 });
-  const byOddsBucketPrepared = prepareGrouped(stats?.by_odds_bucket, { minBets: 1, sortBy: "roi", limit: 10 });
+  const bySportPrepared = prepareGrouped(stats?.by_sport, {
+    minBets: 5,
+    sortBy: "roi",
+    limit: 8,
+  });
+  const byBookmakerPrepared = prepareGrouped(stats?.by_bookmaker, {
+    minBets: 5,
+    sortBy: "roi",
+    limit: 8,
+  });
+  const byLeaguePrepared = prepareGrouped(stats?.by_league, {
+    minBets: 5,
+    sortBy: "roi",
+    limit: 12,
+  });
+  const byMarketPrepared = prepareGrouped(stats?.by_market_type, {
+    minBets: 5,
+    sortBy: "roi",
+    limit: 12,
+  });
+  const byOddsBucketPrepared = prepareGrouped(stats?.by_odds_bucket, {
+    minBets: 1,
+    sortBy: "roi",
+    limit: 10,
+  });
+
+  // Akční insighty: nejlepší / nejhorší typy sázek podle profitu
+  const rawMarketInsights = (stats?.by_market_type || []).filter(
+    (m) => m.bets_count >= 5
+  );
+  const sortedMarketsByProfit = [...rawMarketInsights].sort(
+    (a, b) => Number(b.profit_total || 0) - Number(a.profit_total || 0)
+  );
+  const bestMarkets = sortedMarketsByProfit
+    .filter((m) => Number(m.profit_total || 0) > 0)
+    .slice(0, 5);
+  const worstMarkets = [...sortedMarketsByProfit]
+    .reverse()
+    .filter((m) => Number(m.profit_total || 0) < 0)
+    .slice(0, 5);
+  const hasMarketInsights =
+    bestMarkets.length > 0 || worstMarkets.length > 0;
+
+  function buildTicketsQuery(extraFilters = {}) {
+    const params = new URLSearchParams();
+    Object.entries(filters || {}).forEach(([key, value]) => {
+      if (key.startsWith("_")) return;
+      if (value === undefined || value === null || value === "") return;
+      params.set(key, String(value));
+    });
+    Object.entries(extraFilters || {}).forEach(([key, value]) => {
+      if (value === undefined || value === null || value === "") {
+        params.delete(key);
+      } else {
+        params.set(key, String(value));
+      }
+    });
+    return params.toString();
+  }
+
+  function openTickets(extraFilters = {}) {
+    const qs = buildTicketsQuery(extraFilters);
+    const url = qs ? `/tikety?${qs}` : "/tikety";
+    router.push(url);
+  }
+
+  function handleSportBarClick(entry) {
+    if (!entry) return;
+    const sport = sports.find((s) => s.name === entry.label);
+    if (!sport) return;
+    openTickets({ sport_id: sport.id });
+  }
+
+  function handleBookmakerBarClick(entry) {
+    if (!entry) return;
+    const bookmaker = bookmakers.find((b) => b.name === entry.label);
+    if (!bookmaker) return;
+    openTickets({ bookmaker_id: bookmaker.id });
+  }
+
+  function handleMarketBarClick(entry) {
+    if (!entry) return;
+    const mt = marketTypes.find((m) => m.name === entry.label);
+    if (!mt) return;
+    openTickets({ market_type_id: mt.id });
+  }
+
+  const ODDS_BUCKET_RANGES = {
+    "1.01–1.50": { odds_min: 1.01, odds_max: 1.5 },
+    "1.51–2.00": { odds_min: 1.51, odds_max: 2.0 },
+    "2.01–3.00": { odds_min: 2.01, odds_max: 3.0 },
+    "3.01–5.00": { odds_min: 3.01, odds_max: 5.0 },
+    "5.01+": { odds_min: 5.01 },
+  };
+
+  function handleOddsBucketBarClick(entry) {
+    if (!entry) return;
+    const range = ODDS_BUCKET_RANGES[entry.label];
+    if (!range) return;
+    openTickets(range);
+  }
+
+  function handleMarketInsightClick(label) {
+    if (!label) return;
+    const mt = marketTypes.find((m) => m.name === label);
+    if (!mt) return;
+    openTickets({ market_type_id: mt.id });
+  }
+
+  function formatAiFiltersSummary(ctx) {
+    if (!ctx || typeof ctx !== "object") return "";
+    const parts = [];
+
+    const scope = ctx._ai_scope || "overview";
+    if (scope === "markets") {
+      parts.push("zaměření: trhy a kurzy");
+    } else if (scope === "sport") {
+      parts.push("zaměření: vybraný sport");
+    } else {
+      parts.push("zaměření: celkový přehled");
+    }
+
+    if (ctx.date_from || ctx.date_to) {
+      const from = ctx.date_from;
+      const to = ctx.date_to;
+      if (from && to) {
+        parts.push(`období ${from} – ${to}`);
+      } else if (from) {
+        parts.push(`od ${from}`);
+      } else if (to) {
+        parts.push(`do ${to}`);
+      }
+    }
+
+    if (ctx.sport_id) {
+      const sportMatch = sports.find(
+        (s) => String(s.id) === String(ctx.sport_id)
+      );
+      if (sportMatch) {
+        parts.push(`sport: ${sportMatch.name}`);
+      }
+    }
+
+    if (ctx.bookmaker_id) {
+      const bmMatch = bookmakers.find(
+        (b) => String(b.id) === String(ctx.bookmaker_id)
+      );
+      if (bmMatch) {
+        parts.push(`sázkovka: ${bmMatch.name}`);
+      }
+    }
+
+    return parts.join(" • ");
+  }
+
+  const maxDrawdownAmount = Number(o.max_drawdown || 0);
+  const maxDrawdownPercent = o.max_drawdown_percent || 0;
+  const worstStreak = o.worst_streak || 0;
+
+  const bankrollNumber = bankroll != null ? Number(bankroll) : null;
+  let recommendedUnit = "Nastav bankroll v Nastavení";
+  if (bankrollNumber && bankrollNumber > 0) {
+    const low = Math.max(1, Math.round(bankrollNumber * 0.01));
+    const high = Math.max(low, Math.round(bankrollNumber * 0.02));
+    recommendedUnit = `${low.toLocaleString("cs-CZ")}–${high.toLocaleString(
+      "cs-CZ"
+    )} Kč`;
+  }
+
+  const hasRealFilters = Object.entries(filters || {}).some(
+    ([key, value]) =>
+      !key.startsWith("_") &&
+      value !== undefined &&
+      value !== null &&
+      value !== ""
+  );
+
+  function formatDashboardFiltersSummary() {
+    const parts = [];
+
+    // Období
+    let periodLabel = "celé období";
+    if (filters._date_preset) {
+      const preset = DATE_PRESETS.find(
+        (p) => p.id === filters._date_preset
+      );
+      if (preset) {
+        periodLabel = preset.label;
+      }
+    } else if (filters.date_from || filters.date_to) {
+      const from = filters.date_from;
+      const to = filters.date_to;
+      if (from && to) {
+        periodLabel = `${from} – ${to}`;
+      } else if (from) {
+        periodLabel = `od ${from}`;
+      } else if (to) {
+        periodLabel = `do ${to}`;
+      }
+    }
+    parts.push(`Období: ${periodLabel}`);
+
+    // Sport
+    let sportText = "všechny sporty";
+    if (filters.sport_id) {
+      const sportMatch = sports.find(
+        (s) => String(s.id) === String(filters.sport_id)
+      );
+      if (sportMatch) {
+        sportText = sportMatch.name;
+      } else {
+        sportText = `ID ${filters.sport_id}`;
+      }
+    }
+    parts.push(`Sport: ${sportText}`);
+
+    // Sázkovka
+    let bookText = "všechny sázkovky";
+    if (filters.bookmaker_id) {
+      const bmMatch = bookmakers.find(
+        (b) => String(b.id) === String(filters.bookmaker_id)
+      );
+      if (bmMatch) {
+        bookText = bmMatch.name;
+      } else {
+        bookText = `ID ${filters.bookmaker_id}`;
+      }
+    }
+    parts.push(`Sázkovka: ${bookText}`);
+
+    return parts.join(" • ");
+  }
+
+  const filterSummaryText = formatDashboardFiltersSummary();
 
   return (
     <div>
@@ -599,16 +905,28 @@ export default function Dashboard() {
             Přehled tvých sázkových výsledků
           </p>
         </div>
-        <div style={{ display: "flex", gap: 12 }}>
+        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
           <FilterDropdown
             filters={filters}
             setFilters={setFilters}
             sports={sports}
             bookmakers={bookmakers}
           />
-          <button className="btn btn-primary" onClick={handleAiAnalyze}>
-            🤖 AI Analýza
-          </button>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <select
+              className="input"
+              style={{ width: 170, fontSize: "0.75rem" }}
+              value={aiScope}
+              onChange={(e) => setAiScope(e.target.value)}
+            >
+              <option value="overview">AI: Celkový přehled</option>
+              <option value="markets">AI: Trhy a kurzy</option>
+              <option value="sport">AI: Vybraný sport</option>
+            </select>
+            <button className="btn btn-primary" onClick={handleAiAnalyze}>
+              🤖 AI Analýza
+            </button>
+          </div>
           <button className="btn btn-ghost" onClick={handleOpenAiHistory}>
             📜 Historie analýz
           </button>
@@ -617,6 +935,11 @@ export default function Dashboard() {
 
       {/* Weekly Summary */}
       {!loading && stats?.weekly && <WeeklySummary data={stats.weekly} />}
+
+      {/* Filters summary */}
+      <p style={{ fontSize: "0.75rem", color: "var(--color-text-secondary)", marginBottom: "0.75rem" }}>
+        Aktuální filtry: {filterSummaryText}
+      </p>
 
 
       {loading ? (
@@ -658,6 +981,19 @@ export default function Dashboard() {
               icon="🎫"
             />
             <KpiCard
+              label="Max drawdown"
+              value={
+                maxDrawdownAmount > 0
+                  ? `-${maxDrawdownAmount.toLocaleString("cs-CZ")} Kč`
+                  : "0 Kč"
+              }
+              suffix={
+                maxDrawdownAmount > 0 ? ` (${maxDrawdownPercent || 0} %)` : ""
+              }
+              color="red"
+              icon="📉"
+            />
+            <KpiCard
               label="Ø Kurz"
               value={o.avg_odds || 0}
               color="accent"
@@ -689,6 +1025,19 @@ export default function Dashboard() {
               }
               icon="📊"
             />
+            <KpiCard
+              label="Nejdelší série proher"
+              value={worstStreak || 0}
+              suffix="proher"
+              color="red"
+              icon="🔥"
+            />
+            <KpiCard
+              label="Doporučená jednotka (1–2 %)"
+              value={recommendedUnit}
+              color="yellow"
+              icon="🧠"
+            />
           </div>
 
           {/* Tabs */}
@@ -704,7 +1053,7 @@ export default function Dashboard() {
                   title="📈 Profit v čase"
                   subtitle={timeseries.length > 0 ? `${timeseries.length} dní • Poslední: ${timeseries[timeseries.length - 1]?.date}` : null}
                 >
-                  {timeseries.length > 0 ? (
+            {timeseries.length > 0 ? (
                     <ResponsiveContainer width="100%" height={280}>
                       <AreaChart data={timeseries} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
                         <defs>
@@ -758,7 +1107,12 @@ export default function Dashboard() {
                         />
                       </AreaChart>
                     </ResponsiveContainer>
-                  ) : <EmptyState />}
+                  ) : (
+                    <EmptyState
+                      hasFilters={hasRealFilters}
+                      onResetFilters={() => setFilters({})}
+                    />
+                  )}
                 </ChartCard>
 
                 <ChartCard
@@ -769,7 +1123,13 @@ export default function Dashboard() {
                       : "Zobrazují se jen sporty s alespoň 5 sázkami"
                   }
                 >
-                  <RoiBarChart data={bySportPrepared} highlightBest />
+                  <RoiBarChart
+                    data={bySportPrepared}
+                    highlightBest
+                    onBarClick={handleSportBarClick}
+                    emptyHasFilters={hasRealFilters}
+                    emptyOnReset={() => setFilters({})}
+                  />
                 </ChartCard>
 
                 <ChartCard
@@ -782,8 +1142,11 @@ export default function Dashboard() {
                     highlightBest
                     colorMap={{
                       "Tipsport": "#3b82f6", // Modrá
-                      "Betano": "#f97316"    // Oranžová
+                      "Betano": "#f97316", // Oranžová
                     }}
+                    onBarClick={handleBookmakerBarClick}
+                    emptyHasFilters={hasRealFilters}
+                    emptyOnReset={() => setFilters({})}
                   />
                 </ChartCard>
 
@@ -795,7 +1158,11 @@ export default function Dashboard() {
                 </ChartCard>
 
                 <div style={{ gridColumn: "span 2" }}>
-                  <MonthlyStatsTable data={stats?.by_month} />
+                  <MonthlyStatsTable
+                    data={stats?.by_month}
+                    emptyHasFilters={hasRealFilters}
+                    emptyOnReset={() => setFilters({})}
+                  />
                 </div>
               </>
             )}
@@ -811,20 +1178,182 @@ export default function Dashboard() {
                       : "Zobrazují se jen typy sázek s alespoň 5 sázkami"
                   }
                 >
-                  <RoiBarChart data={byMarketPrepared} positiveColor="#3b82f6" highlightBest />
+                  <RoiBarChart
+                    data={byMarketPrepared}
+                    positiveColor="#3b82f6"
+                    highlightBest
+                    onBarClick={handleMarketBarClick}
+                    emptyHasFilters={hasRealFilters}
+                    emptyOnReset={() => setFilters({})}
+                  />
                 </ChartCard>
 
                 <ChartCard
                   title="🎰 ROI podle kurzového pásma"
                   subtitle="Kde máš edge? Seřazeno podle ROI"
                 >
-                  <RoiBarChart data={byOddsBucketPrepared} positiveColor="#eab308" highlightBest />
+                  <RoiBarChart
+                    data={byOddsBucketPrepared}
+                    positiveColor="#eab308"
+                    highlightBest
+                    onBarClick={handleOddsBucketBarClick}
+                    emptyHasFilters={hasRealFilters}
+                    emptyOnReset={() => setFilters({})}
+                  />
                 </ChartCard>
               </>
             )}
 
             {/* ─── Vzorce ZRUŠENO ─── */}
           </div>
+
+          {/* Akční insighty – nejziskovější a nejproblematičtější typy sázek */}
+          {activeTab === "trhy" && hasMarketInsights && (
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+                gap: 16,
+                marginBottom: "1.5rem",
+              }}
+            >
+              <div className="glass-card" style={{ padding: "1.25rem" }}>
+                <h3
+                  style={{
+                    fontSize: "0.95rem",
+                    fontWeight: 600,
+                    marginBottom: 12,
+                    color: "var(--color-red)",
+                  }}
+                >
+                  ⚠️ Na co si dát pozor
+                </h3>
+                <p
+                  style={{
+                    fontSize: "0.75rem",
+                    color: "var(--color-text-muted)",
+                    marginBottom: 12,
+                  }}
+                >
+                  Typy sázek s nejhorším profitem (min. 5 sázek v&nbsp;aktuálním filtru).
+                </p>
+                {worstMarkets.length ? (
+                  <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+                    {worstMarkets.map((m, i) => {
+                      const bets = (m.wins_count || 0) + (m.losses_count || 0);
+                      const hitrate =
+                        bets > 0
+                          ? Math.round(
+                              ((m.wins_count || 0) / bets) * 1000
+                            ) / 10
+                          : 0;
+                      return (
+                        <li key={`${m.label}-worst-${i}`} style={{ marginBottom: 6 }}>
+                          <div
+                            onClick={() => handleMarketInsightClick(m.label)}
+                            style={{
+                              padding: "8px 10px",
+                              background: "var(--color-red-soft)",
+                              borderRadius: 8,
+                              fontSize: "0.8rem",
+                              cursor: "pointer",
+                            }}
+                          >
+                            <strong>{m.label}</strong>:{" "}
+                            {Number(m.profit_total || 0).toLocaleString(
+                              "cs-CZ"
+                            )}{" "}
+                            Kč (ROI {m.roi_percent}%,
+                            {" "}
+                            {m.wins_count} výher / {m.losses_count} proher,
+                            {" "}
+                            hitrate {hitrate}%)
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : (
+                  <p
+                    style={{
+                      fontSize: "0.8rem",
+                      color: "var(--color-text-muted)",
+                    }}
+                  >
+                    Nenašly se žádné typy sázek s dostatečným počtem tiketů.
+                  </p>
+                )}
+              </div>
+
+              <div className="glass-card" style={{ padding: "1.25rem" }}>
+                <h3
+                  style={{
+                    fontSize: "0.95rem",
+                    fontWeight: 600,
+                    marginBottom: 12,
+                    color: "var(--color-green)",
+                  }}
+                >
+                  ✅ Silné stránky
+                </h3>
+                <p
+                  style={{
+                    fontSize: "0.75rem",
+                    color: "var(--color-text-muted)",
+                    marginBottom: 12,
+                  }}
+                >
+                  Typy sázek, kde se ti dlouhodobě daří (min. 5 sázek v&nbsp;aktuálním filtru).
+                </p>
+                {bestMarkets.length ? (
+                  <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+                    {bestMarkets.map((m, i) => {
+                      const bets = (m.wins_count || 0) + (m.losses_count || 0);
+                      const hitrate =
+                        bets > 0
+                          ? Math.round(
+                              ((m.wins_count || 0) / bets) * 1000
+                            ) / 10
+                          : 0;
+                      return (
+                        <li key={`${m.label}-best-${i}`} style={{ marginBottom: 6 }}>
+                          <div
+                            onClick={() => handleMarketInsightClick(m.label)}
+                            style={{
+                              padding: "8px 10px",
+                              background: "var(--color-green-soft)",
+                              borderRadius: 8,
+                              fontSize: "0.8rem",
+                              cursor: "pointer",
+                            }}
+                          >
+                            <strong>{m.label}</strong>:{" "}
+                            {Number(m.profit_total || 0).toLocaleString(
+                              "cs-CZ"
+                            )}{" "}
+                            Kč (ROI {m.roi_percent}%,
+                            {" "}
+                            {m.wins_count} výher / {m.losses_count} proher,
+                            {" "}
+                            hitrate {hitrate}%)
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : (
+                  <p
+                    style={{
+                      fontSize: "0.8rem",
+                      color: "var(--color-text-muted)",
+                    }}
+                  >
+                    Zatím žádné trhy s dostatečným počtem sázek.
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
         </>
       )}
 
@@ -868,9 +1397,14 @@ export default function Dashboard() {
             <div style={{ overflow: "auto", flex: 1 }}>
               {aiHistoryDetail ? (
                 <>
-                  <p style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", marginBottom: 12 }}>
+                  <p style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", marginBottom: 4 }}>
                     {aiHistoryDetail.created_at ? new Date(aiHistoryDetail.created_at).toLocaleString("cs-CZ") : ""}
                   </p>
+                  {aiHistoryDetail.context && (
+                    <p style={{ fontSize: "0.75rem", color: "var(--color-text-secondary)", marginBottom: 12 }}>
+                      {formatAiFiltersSummary(aiHistoryDetail.context)}
+                    </p>
+                  )}
                   <div style={{
                     background: "var(--color-bg-card)",
                     borderRadius: 12,
@@ -905,6 +1439,11 @@ export default function Dashboard() {
                       <div style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", marginBottom: 4 }}>
                         {item.created_at ? new Date(item.created_at).toLocaleString("cs-CZ") : ""}
                       </div>
+                      {item.context && (
+                        <div style={{ fontSize: "0.75rem", color: "var(--color-text-secondary)", marginBottom: 4 }}>
+                          {formatAiFiltersSummary(item.context)}
+                        </div>
+                      )}
                       <div style={{ fontSize: "0.85rem", color: "var(--color-text-primary)" }}>
                         {(item.response_text || "").slice(0, 200)}
                         {(item.response_text || "").length > 200 ? "…" : ""}

@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BetTracker</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+      width: 260px;
+      padding: 12px 14px;
+      margin: 0;
+      font-size: 13px;
+    }
+    h2 {
+      font-size: 13px;
+      font-weight: 600;
+      color: #334155;
+      margin: 0 0 10px 0;
+    }
+    .row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    label {
+      color: #475569;
+      flex: 1;
+    }
+    select {
+      padding: 4px 8px;
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+      font-size: 12px;
+      min-width: 140px;
+    }
+    .hint {
+      font-size: 11px;
+      color: #94a3b8;
+      margin-top: 6px;
+    }
+    a {
+      font-size: 11px;
+      color: #0369a1;
+      text-decoration: none;
+    }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <h2>BetTracker</h2>
+  <div class="row">
+    <label for="visibility">Tlačítka zobrazit</label>
+    <select id="visibility">
+      <option value="tipsport_betano_only">Jen Tipsport / Betano</option>
+      <option value="everywhere">Všude</option>
+    </select>
+  </div>
+  <p class="hint">Upcoming (budoucí události) a tlačítka v liště.</p>
+  <p style="margin-top:10px;"><a href="#" id="options-link">Všechna nastavení</a></p>
+  <script src="popup.js"></script>
+</body>
+</html>

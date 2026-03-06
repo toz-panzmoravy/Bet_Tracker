@@ -1,0 +1,15 @@
+{
+  "$schema": "https://schema.tauri.app/2/capability",
+  "identifier": "default",
+  "description": "Capability for the BetTracker Overlay window",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-show",
+    "core:window:allow-center",
+    "core:window:allow-set-focus",
+    "shell:allow-open",
+    "window-state:default",
+    "global-shortcut:default"
+  ]
+}

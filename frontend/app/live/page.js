@@ -19,7 +19,8 @@ export default function LivePage() {
       setLoading(true);
       setError(null);
       try {
-        const data = await getTickets({ active_or_live: true, limit: 100 });
+        // Zobrazit opravdu jen tikety, které jsou označené jako LIVE a ještě nejsou vyhodnocené.
+        const data = await getTickets({ is_live: true, status: "open", limit: 100 });
         setTickets(data.items ?? []);
       } catch (e) {
         setError(e.message);
@@ -84,12 +85,13 @@ export default function LivePage() {
                 const snap = t.last_live_snapshot;
                 const scoreText = snap && typeof snap === "object" ? (snap.scraped_text || snap.message || "") : "";
                 const statusInfo = STATUS_MAP[t.status] || { label: t.status, icon: "•" };
+                const typeLabel = t.ticket_type === "aku" ? "AKU" : (t.market_label || "—");
                 return (
                   <tr key={t.id} style={{ borderBottom: "1px solid var(--color-border)" }}>
                     <td style={{ padding: "0.5rem 0.75rem" }}>{t.bookmaker?.name ?? "—"}</td>
                     <td style={{ padding: "0.5rem 0.75rem" }}>{t.sport?.name ?? "—"}</td>
                     <td style={{ padding: "0.5rem 0.75rem" }}>{t.home_team} – {t.away_team}</td>
-                    <td style={{ padding: "0.5rem 0.75rem" }}>{t.market_label || "—"}</td>
+                    <td style={{ padding: "0.5rem 0.75rem" }}>{typeLabel}</td>
                     <td style={{ padding: "0.5rem 0.75rem" }}>{t.selection || "—"}</td>
                     <td style={{ padding: "0.5rem 0.75rem" }}>{t.odds != null ? Number(t.odds) : "—"}</td>
                     <td style={{ padding: "0.5rem 0.75rem" }}>{t.stake != null ? `${Number(t.stake)} Kč` : "—"}</td>

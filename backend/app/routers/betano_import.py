@@ -94,30 +94,28 @@ def _map_sport_icon_to_label(icon_id: str | None) -> str | None:
 
 
 def _map_status(raw: str | None, payout: Decimal | None) -> TicketStatus:
-    """Převede surový status z Betano na TicketStatus."""
-    # Primárně podle výhry
+    """Převede surový status z Betano na TicketStatus. U nevyhodnocených tiketů vždy open."""
+    val = (raw or "").strip().lower()
+    # Otevřené / čekající – nikdy neukládat jako won/lost (i když payout je 0)
+    if val in ("open", "čeká", "ceka", "nevyhodnoceno", "pending", "waiting", "otevřená", "otevrena", ""):
+        return TicketStatus.open
+    if "čeká" in val or "nevyhodnoceno" in val or "pending" in val or "waiting" in val:
+        return TicketStatus.open
+
+    # Vyhodnocené podle textu nebo payout
     try:
         if payout is not None and Decimal(payout) > 0:
             return TicketStatus.won
     except Exception:
         pass
 
-    if raw:
-        val = raw.strip().lower()
+    if val:
         if "výhry" in val or "vyhry" in val or "win" in val:
             return TicketStatus.won
         if "prohry" in val or "prohra" in val or "lost" in val:
             return TicketStatus.lost
         if "cash out" in val:
-            # Cash out – typicky bráno jako vyhodnocený tiket s konkrétní výhrou
             return TicketStatus.won if payout and payout > 0 else TicketStatus.void
-
-    if payout is not None:
-        try:
-            if Decimal(payout) == 0:
-                return TicketStatus.lost
-        except Exception:
-            pass
 
     return TicketStatus.open
 
@@ -165,6 +163,11 @@ def _build_ticket_create(
     if item.betano_key:
         betano_ref = f"{_BETANO_KEY_PREFIX}{item.betano_key.strip()}"
 
+    is_live = getattr(item, "is_live", None)
+    if is_live is None:
+        is_live = False
+
+    event_date = getattr(item, "event_start_at", None) or item.placed_at
     return TicketCreate(
         bookmaker_id=betano_bookmaker_id,
         sport_id=sport_id,
@@ -173,7 +176,7 @@ def _build_ticket_create(
         parent_id=None,
         home_team=item.home_team.strip(),
         away_team=item.away_team.strip(),
-        event_date=item.placed_at,
+        event_date=event_date,
         market_label=market_label,
         selection=selection,
         odds=odds,
@@ -182,7 +185,7 @@ def _build_ticket_create(
         profit=None,
         status=status.value,
         ticket_type=ticket_type,
-        is_live=False,
+        is_live=is_live,
         source="manual",
         ocr_image_path=betano_ref,
     )
@@ -337,6 +340,9 @@ def import_from_scraper(
                     != data.status
                 ):
                     update_payload["status"] = data.status
+
+                if duplicate.is_live != data.is_live:
+                    update_payload["is_live"] = data.is_live
 
                 if data.odds is not None and (
                     duplicate.odds is None

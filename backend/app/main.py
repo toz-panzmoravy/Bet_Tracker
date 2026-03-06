@@ -11,6 +11,7 @@ from app.routers.market_types import router as market_types_router
 from app.routers.settings import router as settings_router
 from app.routers.tipsport_import import router as tipsport_import_router
 from app.routers.betano_import import router as betano_import_router
+from app.routers.fortuna_import import router as fortuna_import_router
 from app.routers.import_preview import router as import_preview_router
 from app.routers.analytics import router as analytics_router
 from app.routers.live import router as live_router
@@ -23,11 +24,11 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# CORS – z env (CORS_ORIGINS) nebo výchozí
-_origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
+# CORS – pro lokální vývoj povolíme všechny originy,
+# aby nedocházelo k blokaci mezi localhost:3000 a localhost:8000
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_origins,
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -42,6 +43,7 @@ app.include_router(market_types_router)
 app.include_router(settings_router)
 app.include_router(tipsport_import_router)
 app.include_router(betano_import_router)
+app.include_router(fortuna_import_router)
 app.include_router(import_preview_router)
 app.include_router(analytics_router)
 app.include_router(live_router)

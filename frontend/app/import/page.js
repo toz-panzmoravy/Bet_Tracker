@@ -269,8 +269,9 @@ function ImportPageContent() {
                     status: t.status ?? "open",
                     bookmaker_id: t.bookmaker_id ?? null,
                     ticket_type: t.ticket_type ?? "solo",
-                    is_live: !!(t.is_live),
+                    is_live: false,
                     source: "manual",
+                    legs: t.legs || [],
                 }));
                 setParsedTickets(mapped);
             })
@@ -313,7 +314,7 @@ function ImportPageContent() {
             payout: parseFloat(t.payout) || 0,
             status: t.status || "open",
             ticket_type: opts.ticket_type ?? (t.ticket_type || "solo"),
-            is_live: t.is_live || false,
+            is_live: false,
             source: image ? "ocr" : "manual",
         });
     }
@@ -334,6 +335,57 @@ function ImportPageContent() {
                 if (parsedTickets[i]._akuParentKey) continue;
                 if (!validIndices.includes(i)) continue;
                 const t = parsedTickets[i];
+
+                if (t.legs && t.legs.length > 0 && t.ticket_type === "aku") {
+                    try {
+                        const bookmakerId = t.bookmaker_id || bookmakers[0]?.id;
+                        const sportId = t.sport_id || sports.find(s => s.name.toLowerCase() === (t.sport || "").toLowerCase())?.id || 1;
+                        const parent = await createTicket({
+                            bookmaker_id: bookmakerId,
+                            sport_id: sportId,
+                            league_id: null,
+                            market_type_id: null,
+                            parent_id: null,
+                            home_team: t.home_team || "AKU",
+                            away_team: t.away_team || "Kombinace",
+                            market_label: null,
+                            selection: null,
+                            odds: parseFloat(t.odds) || 1.0,
+                            stake: parseFloat(t.stake) || 0,
+                            payout: t.payout != null ? parseFloat(t.payout) : null,
+                            status: t.status || "open",
+                            ticket_type: "aku",
+                            is_live: false,
+                            source: "manual",
+                        });
+                        savedCount++;
+                        for (const leg of t.legs) {
+                            const legSportId = sportId;
+                            await createTicket({
+                                bookmaker_id: bookmakerId,
+                                sport_id: legSportId,
+                                league_id: null,
+                                market_type_id: null,
+                                parent_id: parent.id,
+                                home_team: leg.home_team || "–",
+                                away_team: leg.away_team || "–",
+                                market_label: leg.market_label || null,
+                                selection: leg.selection || null,
+                                odds: parseFloat(leg.odds) || 1.0,
+                                stake: 0,
+                                payout: null,
+                                status: t.status || "open",
+                                ticket_type: "solo",
+                                is_live: false,
+                                source: "manual",
+                            });
+                            savedCount++;
+                        }
+                    } catch (e) {
+                        apiErrors.push({ index: i, message: e.message });
+                    }
+                    continue;
+                }
 
                 if (t._isAkuParent && t._akuKey) {
                     const childIndices = parsedTickets.map((_, idx) => idx).filter(idx => parsedTickets[idx]._akuParentKey === t._akuKey);
@@ -987,7 +1039,7 @@ function TicketForm({ ticket: t, index: i, sports, allMarketTypes, topMarketType
                 </div>
             </div>
 
-            {/* Stav + Live */}
+            {/* Stav */}
             <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center" }}>
                 <div>
                     <label style={{ color: "var(--color-text-muted)", fontSize: "0.7rem", display: "block", marginBottom: 4 }}>Stav</label>
@@ -999,11 +1051,6 @@ function TicketForm({ ticket: t, index: i, sports, allMarketTypes, topMarketType
                     <option value="void">↩️ Vráceno</option>
                     </select>
                 </div>
-                <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: "0.8rem", color: "var(--color-text-secondary)", marginTop: 20 }}>
-                    <input type="checkbox" checked={t.is_live || false}
-                        onChange={(e) => onUpdate(i, "is_live", e.target.checked)} />
-                    LIVE
-                </label>
             </div>
             {hasErrors && (
                 <div style={{ marginTop: 8, padding: "6px 10px", background: "var(--color-red-soft)", borderRadius: 8, fontSize: "0.75rem", color: "var(--color-red)" }}>

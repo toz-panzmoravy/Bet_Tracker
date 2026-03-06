@@ -1,10 +1,10 @@
 from decimal import Decimal
 from typing import Optional, List
 from datetime import datetime, timedelta
-from sqlalchemy import func, case, and_
+from sqlalchemy import func, case, and_, or_
 from sqlalchemy.orm import Session
 
-from app.models import Ticket, TicketStatus, Sport, MarketType
+from app.models import Ticket, TicketStatus, TicketType, Sport, MarketType
 from app.schemas import (
     OverallStats, GroupedStat, TimeseriesPoint, StatsOverview
 )
@@ -45,9 +45,15 @@ def _build_filters(db: Session, query, filters: dict):
     return query
 
 
+def _exclude_aku_parents(query):
+    """Vyloučí rodiče AKU ze statistik – počítáme jen sólové tikety a děti (jednotlivé sázky)."""
+    return query.filter(or_(Ticket.parent_id.isnot(None), Ticket.ticket_type != TicketType.aku))
+
+
 def _get_filtered_tickets(db: Session, filters: dict):
-    """Vrátí all + settled tikety s aplikovanými filtry."""
+    """Vrátí all + settled tikety s aplikovanými filtry (bez rodičů AKU)."""
     query = db.query(Ticket)
+    query = _exclude_aku_parents(query)
     query = _build_filters(db, query, filters or {})
     all_bets = query.all()
 
@@ -220,6 +226,7 @@ from app.models import Ticket, TicketStatus, Sport, MarketType, Bookmaker, Leagu
 def get_stats_by_sport(db: Session, filters: dict = None) -> List[GroupedStat]:
     """ROI a profit podle sportu."""
     query = db.query(Ticket).join(Sport)
+    query = _exclude_aku_parents(query)
     query = _build_filters(db, query, filters or {})
     tickets = query.all()
     return _group_tickets(tickets, lambda t: t.sport.name if t.sport else "Neznámý")
@@ -242,6 +249,7 @@ def get_stats_by_bookmaker(db: Session, filters: dict = None) -> List[GroupedSta
     }
 
     query = db.query(Ticket).outerjoin(Bookmaker, Ticket.bookmaker_id == Bookmaker.id)
+    query = _exclude_aku_parents(query)
     query = _build_filters(db, query, filters or {})
     tickets = query.all()
 
@@ -294,6 +302,7 @@ def get_stats_by_bookmaker(db: Session, filters: dict = None) -> List[GroupedSta
 def get_stats_by_league(db: Session, filters: dict = None) -> List[GroupedStat]:
     """ROI a profit podle ligy."""
     query = db.query(Ticket).outerjoin(League, Ticket.league_id == League.id)
+    query = _exclude_aku_parents(query)
     query = _build_filters(db, query, filters or {})
     tickets = query.all()
     return _group_tickets(tickets, lambda t: t.league.name if hasattr(t, 'league') and t.league else "Ostatní")
@@ -302,6 +311,7 @@ def get_stats_by_league(db: Session, filters: dict = None) -> List[GroupedStat]:
 def get_stats_by_market(db: Session, filters: dict = None) -> List[GroupedStat]:
     """ROI a profit podle typu sázky (z tabulky MarketType)."""
     query = db.query(Ticket).join(MarketType)
+    query = _exclude_aku_parents(query)
     query = _build_filters(db, query, filters or {})
     tickets = query.all()
     
@@ -315,6 +325,7 @@ def get_stats_by_odds_bucket(db: Session, filters: dict = None) -> List[GroupedS
     """ROI podle kurzového pásma."""
     filters = filters or {}
     query = db.query(Ticket)
+    query = _exclude_aku_parents(query)
     query = _build_filters(db, query, filters)
     tickets = query.all()
 
@@ -381,6 +392,7 @@ def get_stats_by_odds_bucket(db: Session, filters: dict = None) -> List[GroupedS
 def get_stats_by_month(db: Session, filters: dict = None) -> List[GroupedStat]:
     """ROI a profit po měsících (02 - 2026)."""
     query = db.query(Ticket)
+    query = _exclude_aku_parents(query)
     query = _build_filters(db, query, filters or {})
     tickets = query.all()
 
@@ -444,6 +456,7 @@ def get_timeseries(db: Session, filters: dict = None, grouping: str = "daily") -
             TicketStatus.half_win, TicketStatus.half_loss
         ])
     )
+    query = _exclude_aku_parents(query)
     query = _build_filters(db, query, filters)
     query = query.order_by(Ticket.created_at)
     tickets = query.all()

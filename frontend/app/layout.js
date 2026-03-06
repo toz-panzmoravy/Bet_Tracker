@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { href: "/tikety", label: "Tikety", icon: "🎫" },
   { href: "/import", label: "Import", icon: "📸" },
   { href: "/analytics", label: "Analytics", icon: "📈" },
+  { href: "/ai-analyza", label: "AI analýza", icon: "🤖" },
   { href: "/market-types", label: "Typy sázek", icon: "🏷️" },
   { href: "/nastaveni", label: "Nastavení", icon: "⚙️" },
 ];

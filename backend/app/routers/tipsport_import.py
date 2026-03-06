@@ -7,7 +7,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Bookmaker, Sport, Ticket, TicketStatus
+from app.models import Bookmaker, Sport, Ticket, TicketStatus, TicketType
 from app.schemas import (
     TicketCreate,
     TicketUpdate,
@@ -15,8 +15,10 @@ from app.schemas import (
     TipsportScrapeResponse,
     TipsportScrapeResultItem,
     TipsportScrapeTicketIn,
+    TipsportScrapeLegIn,
     TipsportScrapePreviewResponse,
     ScrapePreviewTicket,
+    ScrapePreviewLeg,
 )
 from app.routers.tickets import create_ticket as _create_ticket
 from app.routers.tickets import update_ticket as _update_ticket
@@ -200,23 +202,32 @@ def _build_ticket_create(
     if item.tipsport_key:
         tipsport_ref = f"{_TIPSPORT_KEY_PREFIX}{item.tipsport_key.strip()}"
 
-    is_live = getattr(item, "is_live", None)
-    if is_live is None:
-        is_live = False
+    is_live = False
 
     # Bezpečný fallback pro stake – pokud by z nějakého důvodu přišel None,
     # považujeme ho za 0, aby tiket šel vytvořit a skončil v incomplete filtru.
     stake = item.stake if item.stake is not None else Decimal("0")
 
+    # AKU rodič: vždy jednotný popis (vklad a celkový kurz jsou na rodiči, děti jsou nohy)
+    if ticket_type == "aku":
+        legs = getattr(item, "legs", None) or []
+        n = len(legs)
+        home_team = "AKU"
+        away_team = f"{n} sázek" if n else "Kombinace"
+    else:
+        home_team = item.home_team.strip()
+        away_team = item.away_team.strip()
+
+    event_date = getattr(item, "event_start_at", None) or item.placed_at
     return TicketCreate(
         bookmaker_id=tipsport_bookmaker_id,
         sport_id=sport_id,
         league_id=None,
         market_type_id=None,
         parent_id=None,
-        home_team=item.home_team.strip(),
-        away_team=item.away_team.strip(),
-        event_date=item.placed_at,
+        home_team=home_team,
+        away_team=away_team,
+        event_date=event_date,
         market_label=market_label,
         selection=selection,
         odds=odds,
@@ -226,6 +237,43 @@ def _build_ticket_create(
         status=status.value,
         ticket_type=ticket_type,
         is_live=bool(is_live),
+        source="manual",
+    )
+
+
+def _build_child_ticket_create(
+    db: Session,
+    tipsport_bookmaker_id: int,
+    parent_sport_id: int,
+    parent_status: str,
+    parent_placed_at,
+    parent_is_live: bool,
+    leg: TipsportScrapeLegIn,
+    parent_id: int,
+) -> TicketCreate:
+    """Sestaví TicketCreate pro jednu nohu (dítě) AKU tiketu."""
+    market_label, selection = _normalize_market_and_selection(
+        leg.market_label_raw, leg.selection_raw
+    )
+    odds = leg.odds if leg.odds is not None else Decimal("1.0")
+    return TicketCreate(
+        bookmaker_id=tipsport_bookmaker_id,
+        sport_id=parent_sport_id,
+        league_id=None,
+        market_type_id=None,
+        parent_id=parent_id,
+        home_team=leg.home_team.strip(),
+        away_team=leg.away_team.strip(),
+        event_date=parent_placed_at,
+        market_label=market_label,
+        selection=selection,
+        odds=odds,
+        stake=Decimal("0"),
+        payout=None,
+        profit=None,
+        status=parent_status,
+        ticket_type="solo",
+        is_live=parent_is_live,
         source="manual",
     )
 
@@ -288,6 +336,71 @@ def _find_duplicate(
     return query.first()
 
 
+def _normalize_leg_pair(home: str | None, away: str | None) -> tuple[str, str]:
+    """Normalizuje dvojici domácí–hosté pro porovnání (strip, prázdné řetězce)."""
+    h = (home or "").strip()
+    a = (away or "").strip()
+    return (h, a)
+
+
+def _find_duplicate_aku_by_legs(
+    db: Session,
+    bookmaker_id: int,
+    legs: List[TipsportScrapeLegIn],
+) -> Ticket | None:
+    """
+    Pro AKU tiket s nohami: najde existující AKU rodiče, jehož děti mají
+    odpovídající dvojice (domácí, hosté) jako předané legs.
+
+    - Ideální případ (rozbalený tiket): známe všechny nohy → porovnáváme
+      přesnou shodu množiny dvojic (domácí, hosté).
+    - Collapsed tiket (např. z Tipsport karty vidíme jen první zápas):
+      známe jen část noh → hledáme rodiče, u kterého jsou všechny předané
+      dvojice podmnožinou množiny (domácí, hosté) jeho dětí.
+
+    Díky tomu:
+    - když máme kompletní seznam noh, nedojde k falešnému sloučení různých AKU,
+    - když máme jen část (např. jednu nohu), dokážeme stále spárovat typický
+      případ jednoho AKU, aby uživatel nemusel znovu vyplňovat stejný tiket.
+    """
+    if not legs:
+        return None
+    incoming = [
+        _normalize_leg_pair(leg.home_team, leg.away_team) for leg in legs
+    ]
+    incoming_set = set(incoming)
+    n = len(incoming_set)
+
+    parents = (
+        db.query(Ticket)
+        .filter(
+            Ticket.bookmaker_id == bookmaker_id,
+            Ticket.ticket_type == TicketType.aku,
+            Ticket.parent_id.is_(None),
+        )
+        .all()
+    )
+    for parent in parents:
+        children = (
+            db.query(Ticket).filter(Ticket.parent_id == parent.id).all()
+        )
+        if not children:
+            continue
+        existing_pairs = {
+            _normalize_leg_pair(c.home_team, c.away_team) for c in children
+        }
+
+        # 1) Plná informace – přesná shoda množiny noh
+        if len(existing_pairs) == n and existing_pairs == incoming_set:
+            return parent
+
+        # 2) Částečná informace (např. známe jen první zápas) – všechny
+        #    předané dvojice musí být podmnožinou existujících noh.
+        if existing_pairs.issuperset(incoming_set):
+            return parent
+    return None
+
+
 def _build_duplicate_update_payload(
     duplicate: Ticket,
     data: TicketCreate,
@@ -299,13 +412,10 @@ def _build_duplicate_update_payload(
     """
     update_payload: dict = {}
 
-    # status a is_live: přepsat z Tipsportu (Tipsport má vždy pravdu)
+    # status: přepsat z Tipsportu (Tipsport má vždy pravdu)
     dup_status = str(getattr(duplicate.status, "value", duplicate.status))
     if dup_status != data.status:
         update_payload["status"] = data.status
-    item_is_live = getattr(item, "is_live", None)
-    if item_is_live is not None and bool(duplicate.is_live) != bool(item_is_live):
-        update_payload["is_live"] = bool(item_is_live)
 
     # sport: opravovat při změně
     if duplicate.sport_id != data.sport_id:
@@ -373,7 +483,12 @@ def _sync_duplicate_from_tipsport(
     )
 
 
-def _ticket_create_to_preview(db: Session, data: TicketCreate) -> ScrapePreviewTicket:
+def _ticket_create_to_preview(
+    db: Session,
+    data: TicketCreate,
+    legs: List[ScrapePreviewLeg] | None = None,
+    tipsport_key: str | None = None,
+) -> ScrapePreviewTicket:
     sport = db.query(Sport).filter(Sport.id == data.sport_id).first()
     sport_name = sport.name if sport else "Neznámý"
     event_date_str = data.event_date.isoformat() if data.event_date else None
@@ -392,6 +507,8 @@ def _ticket_create_to_preview(db: Session, data: TicketCreate) -> ScrapePreviewT
         ticket_type=data.ticket_type,
         event_date=event_date_str,
         is_live=data.is_live,
+        legs=legs,
+        tipsport_key=tipsport_key,
     )
 
 
@@ -424,6 +541,10 @@ def scrape_preview(
                 has_original_stake=bool(item.stake is not None and item.stake > 0),
                 has_original_odds=bool(item.odds is not None),
             )
+            if not duplicate and data.ticket_type == "aku" and getattr(item, "legs", None):
+                duplicate = _find_duplicate_aku_by_legs(
+                    db, tipsport_bookmaker_id, item.legs
+                )
             if duplicate:
                 # Tichý \"upsert\" duplicity – stejné chování jako v /scrape endpointu,
                 # jen bez zapisování do výsledků; pro uživatele se duplicate dál tváří
@@ -437,7 +558,24 @@ def scrape_preview(
                 skipped_count += 1
                 continue
 
-            new_tickets.append(_ticket_create_to_preview(db, data))
+            legs_preview: List[ScrapePreviewLeg] | None = None
+            if getattr(item, "legs", None):
+                legs_preview = [
+                    ScrapePreviewLeg(
+                        home_team=leg.home_team.strip(),
+                        away_team=leg.away_team.strip(),
+                        market_label=_normalize_market_and_selection(leg.market_label_raw, leg.selection_raw)[0],
+                        selection=_normalize_market_and_selection(leg.market_label_raw, leg.selection_raw)[1],
+                        odds=leg.odds if leg.odds is not None else Decimal("1.0"),
+                    )
+                    for leg in item.legs
+                ]
+            new_tickets.append(
+                _ticket_create_to_preview(
+                    db, data, legs=legs_preview,
+                    tipsport_key=item.tipsport_key if getattr(item, "tipsport_key", None) else None,
+                )
+            )
         except (SQLAlchemyError, ValueError):
             continue
 
@@ -485,6 +623,10 @@ def import_from_scraper(
                 has_original_stake=bool(item.stake is not None and item.stake > 0),
                 has_original_odds=bool(item.odds is not None),
             )
+            if not duplicate and data.ticket_type == "aku" and getattr(item, "legs", None):
+                duplicate = _find_duplicate_aku_by_legs(
+                    db, tipsport_bookmaker_id, item.legs
+                )
             if duplicate:
                 # Upsert: synchronizovat stav s Tipsportem (důležité pro LIVE – vždy nastavit status + is_live)
                 updated = None
@@ -536,6 +678,34 @@ def import_from_scraper(
                     message=None,
                 )
             )
+
+            # AKU s nohami: vytvořit děti (jednotlivé sázky) pod tímto rodičem
+            legs = getattr(item, "legs", None) or []
+            if data.ticket_type == "aku" and legs:
+                status_val = data.status
+                placed_at = data.event_date
+                is_live = False
+                for leg in legs:
+                    child_data = _build_child_ticket_create(
+                        db,
+                        tipsport_bookmaker_id,
+                        data.sport_id,
+                        status_val,
+                        placed_at,
+                        is_live,
+                        leg,
+                        parent_id=created.id,
+                    )
+                    child_created = _create_ticket(data=child_data, db=db)
+                    created_count += 1
+                    results.append(
+                        TipsportScrapeResultItem(
+                            index=idx,
+                            status="created",
+                            ticket_id=child_created.id,
+                            message="Noha AKU",
+                        )
+                    )
         except (SQLAlchemyError, ValueError) as exc:
             db.rollback()
             error_count += 1

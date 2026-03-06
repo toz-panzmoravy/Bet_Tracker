@@ -22,10 +22,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const payload = { tickets: message.tickets || [] };
     const usePreview = message.preview !== false;
 
-    const endpoint =
-      source === "betano"
-        ? `${API_BASE}/import/betano/scrape${usePreview ? "/preview" : ""}`
-        : `${API_BASE}/import/tipsport/scrape${usePreview ? "/preview" : ""}`;
+    let endpoint = `${API_BASE}/import/tipsport/scrape${usePreview ? "/preview" : ""}`;
+    if (source === "betano") endpoint = `${API_BASE}/import/betano/scrape${usePreview ? "/preview" : ""}`;
+    else if (source === "fortuna") endpoint = `${API_BASE}/import/fortuna/scrape${usePreview ? "/preview" : ""}`;
 
     (async () => {
       try {
@@ -53,6 +52,28 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
     })();
 
+    return true;
+  }
+
+  if (message && message.type === "bettracker-create-preview") {
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/import/preview`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tickets: message.tickets || [] })
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          sendResponse({ ok: false, error: `API ${res.status}: ${text}` });
+          return;
+        }
+        const data = await res.json();
+        sendResponse({ ok: true, data });
+      } catch (e) {
+        sendResponse({ ok: false, error: e.message || String(e) });
+      }
+    })();
     return true;
   }
 

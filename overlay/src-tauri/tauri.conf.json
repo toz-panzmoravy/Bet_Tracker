@@ -1,0 +1,41 @@
+{
+  "productName": "BetTracker Overlay",
+  "version": "0.1.0",
+  "identifier": "cz.bettracker.overlay",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "security": {
+      "csp": null
+    },
+    "windows": [
+      {
+        "label": "main",
+        "title": "BetTracker Overlay",
+        "width": 380,
+        "height": 480,
+        "x": 100,
+        "y": 100,
+        "visible": false,
+        "resizable": true,
+        "decorations": true,
+        "minWidth": 320,
+        "minHeight": 200
+      }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": ["icons/icon.ico"],
+    "longDescription": "Přehled vsazených a live zápasů z BetTrackeru.",
+    "shortDescription": "BetTracker Live Overlay",
+    "category": "Utility",
+    "copyright": ""
+  },
+  "plugins": {}
+}

@@ -8,7 +8,7 @@ from sqlalchemy import case, or_, and_
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
-from app.models import Ticket, TicketStatus, TicketType, TicketSource, Sport
+from app.models import Ticket, TicketStatus, TicketType, TicketSource, Sport, League
 from app.schemas import TicketCreate, TicketUpdate, TicketOut, TicketListResponse
 
 router = APIRouter(prefix="/api/tickets", tags=["Tikety"])
@@ -85,6 +85,7 @@ def list_tickets(
     odds_max: Optional[float] = None,
     incomplete: Optional[str] = Query(None, description="Jen tikety k doplnění (neúplné údaje); předat 1 nebo true"),
     active_or_live: Optional[str] = Query(None, description="Pro stránku LIVE: 1 nebo true = status=open OR is_live=true"),
+    search: Optional[str] = Query(None, description="Fulltextové hledání v týmech, lize, typu sázky a výběru"),
     sort_by: str = Query(default="created_at"),
     sort_dir: str = Query(default="desc"),
     limit: int = Query(default=100, le=500),
@@ -100,6 +101,7 @@ def list_tickets(
         odds_min=odds_min, odds_max=odds_max,
         incomplete=incomplete in ("1", "true", "True", True) if incomplete is not None else None,
         active_or_live=active_or_live in (True, "1", "true", "True") if active_or_live is not None else None,
+        search=search,
         sort_by=sort_by, sort_dir=sort_dir,
     )
     total = query.count()
@@ -107,10 +109,32 @@ def list_tickets(
     return {"items": items, "total": total}
 
 
-def _tickets_query(db: Session, sport_id=None, league_id=None, bookmaker_id=None, status=None,
-                   market_type_id=None, parent_id=None, ticket_type=None, is_live=None, date_from=None, date_to=None,
-                   odds_min=None, odds_max=None, incomplete=None, active_or_live=None, sort_by="created_at", sort_dir="desc"):
-    """Sdílený dotaz pro list_tickets a export. incomplete=True: jen tikety k doplnění. active_or_live=True: status=open OR is_live."""
+def _tickets_query(
+    db: Session,
+    sport_id=None,
+    league_id=None,
+    bookmaker_id=None,
+    status=None,
+    market_type_id=None,
+    parent_id=None,
+    ticket_type=None,
+    is_live=None,
+    date_from=None,
+    date_to=None,
+    odds_min=None,
+    odds_max=None,
+    incomplete=None,
+    active_or_live=None,
+    search=None,
+    sort_by="created_at",
+    sort_dir="desc",
+):
+    """Sdílený dotaz pro list_tickets a export.
+
+    incomplete=True: jen tikety k doplnění.
+    active_or_live=True: status=open OR is_live.
+    search: fulltext přes základní textová pole (týmy, liga, trh, výběr).
+    """
     query = db.query(Ticket).options(
         joinedload(Ticket.bookmaker),
         joinedload(Ticket.sport),
@@ -165,6 +189,19 @@ def _tickets_query(db: Session, sport_id=None, league_id=None, bookmaker_id=None
         query = query.filter(Ticket.odds >= odds_min)
     if odds_max:
         query = query.filter(Ticket.odds <= odds_max)
+    if search:
+        pattern = f"%{search}%"
+        # join na ligu kvůli filtrování podle jejího názvu
+        query = query.outerjoin(League, Ticket.league_id == League.id)
+        query = query.filter(
+            or_(
+                Ticket.home_team.ilike(pattern),
+                Ticket.away_team.ilike(pattern),
+                Ticket.market_label.ilike(pattern),
+                Ticket.selection.ilike(pattern),
+                League.name.ilike(pattern),
+            )
+        )
 
     # Řazení: rodič AKU + děti držet pohromadě
     order_key = case(
@@ -206,16 +243,27 @@ def export_tickets_csv(
     date_to: Optional[datetime] = None,
     odds_min: Optional[float] = None,
     odds_max: Optional[float] = None,
+    search: Optional[str] = None,
     sort_by: str = Query(default="created_at"),
     sort_dir: str = Query(default="desc"),
     db: Session = Depends(get_db),
 ):
     """Export tiketů jako CSV (s aktuálními filtry)."""
     query = _tickets_query(
-        db, sport_id=sport_id, league_id=league_id, bookmaker_id=bookmaker_id,
-        status=status, market_type_id=market_type_id, is_live=is_live,
-        date_from=date_from, date_to=date_to, odds_min=odds_min, odds_max=odds_max,
-        sort_by=sort_by, sort_dir=sort_dir,
+        db,
+        sport_id=sport_id,
+        league_id=league_id,
+        bookmaker_id=bookmaker_id,
+        status=status,
+        market_type_id=market_type_id,
+        is_live=is_live,
+        date_from=date_from,
+        date_to=date_to,
+        odds_min=odds_min,
+        odds_max=odds_max,
+        search=search,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
     )
     rows = query.all()
     buf = io.StringIO()

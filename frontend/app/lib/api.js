@@ -1,8 +1,24 @@
 const getApiBase = () => {
-  const url = typeof process !== "undefined" && process.env?.NEXT_PUBLIC_API_URL
-    ? process.env.NEXT_PUBLIC_API_URL
-    : "http://127.0.0.1:8000";
-  return url.endsWith("/api") ? url : `${url}/api`;
+  const envUrl =
+    typeof process !== "undefined" && process.env?.NEXT_PUBLIC_API_URL
+      ? process.env.NEXT_PUBLIC_API_URL
+      : null;
+
+  if (envUrl) {
+    return envUrl.endsWith("/api") ? envUrl : `${envUrl}/api`;
+  }
+
+  // Výchozí chování: volat backend na stejném hostu, port 8000
+  // (funguje jak pro localhost, tak pro přístup z jiné mašiny v síti)
+  if (typeof window !== "undefined") {
+    const protocol = window.location.protocol === "https:" ? "https" : "http";
+    const host = window.location.hostname || "127.0.0.1";
+    const base = `${protocol}://${host}:8000`;
+    return base.endsWith("/api") ? base : `${base}/api`;
+  }
+
+  const fallback = "http://127.0.0.1:8000";
+  return fallback.endsWith("/api") ? fallback : `${fallback}/api`;
 };
 
 async function fetchApi(path, options = {}) {
@@ -17,6 +33,25 @@ async function fetchApi(path, options = {}) {
   }
 
   try {
+    // #region agent log
+    fetch("http://127.0.0.1:7552/ingest/cb53d3b0-eda4-4d84-994f-77dc1a876629", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Debug-Session-Id": "890d0a",
+      },
+      body: JSON.stringify({
+        sessionId: "890d0a",
+        runId: "pre-fix",
+        hypothesisId: "H1",
+        location: "frontend/app/lib/api.js:36",
+        message: "fetchApi request",
+        data: { path, API_BASE, timeout },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion agent log
+
     const res = await fetch(`${API_BASE}${path}`, {
       headers: { "Content-Type": "application/json", ...fetchOpts.headers },
       signal: controller.signal,
@@ -37,6 +72,25 @@ async function fetchApi(path, options = {}) {
     }
     return res.json();
   } catch (e) {
+    // #region agent log
+    fetch("http://127.0.0.1:7552/ingest/cb53d3b0-eda4-4d84-994f-77dc1a876629", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Debug-Session-Id": "890d0a",
+      },
+      body: JSON.stringify({
+        sessionId: "890d0a",
+        runId: "pre-fix",
+        hypothesisId: "H2",
+        location: "frontend/app/lib/api.js:56",
+        message: "fetchApi error",
+        data: { path, API_BASE, errorName: e?.name, errorMessage: e?.message },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion agent log
+
     clearTimeout(timeoutId);
     throw e;
   }
@@ -195,12 +249,29 @@ export async function aiAnalyze(filters = {}, question = "") {
   return fetchApi("/ai/analyze", {
     method: "POST",
     body: JSON.stringify({ filters, question }),
-    timeout: 180000, // 3 minuty – LLM analýza
+    timeout: 600000, // 10 minut – pomalé lokální LLM (Dashboard)
   });
 }
 
 export async function getAiAnalyses(limit = 20) {
   return fetchApi(`/ai/analyses?limit=${limit}`);
+}
+
+// ─── AI Strategy (asynchronní job) ────────────────────
+
+export async function startStrategyAnalysis() {
+  // rychlý request, jen založí job
+  return fetchApi("/ai/strategy-analysis/start", {
+    method: "POST",
+    timeout: 15000,
+  });
+}
+
+export async function getStrategyAnalysis(id) {
+  return fetchApi(`/ai/strategy-analysis/${id}`, {
+    method: "GET",
+    timeout: 30000,
+  });
 }
 
 // ─── Meta ─────────────────────────────────────────────

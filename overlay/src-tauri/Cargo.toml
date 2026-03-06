@@ -1,0 +1,21 @@
+[package]
+name = "bettracker-overlay"
+version = "0.1.0"
+description = "BetTracker Live Overlay"
+authors = ["BetTracker"]
+edition = "2021"
+rust-version = "1.70"
+
+[lib]
+name = "bettracker_overlay_lib"
+path = "src/lib.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+tauri-plugin-window-state = "2"
+tauri-plugin-global-shortcut = "2"
+sysinfo = "0.31"

@@ -24,3 +24,7 @@ Thumbs.db
 
 # Misc
 *.log
+
+# Overlay (Tauri / Vite build)
+overlay/src-tauri/target/
+overlay/dist/

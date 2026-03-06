@@ -5,16 +5,20 @@ from sqlalchemy import func, text
 
 from app.database import get_db
 from app.models.models import MarketType, Ticket, TicketStatus, Sport
-from app.schemas.schemas import MarketTypeCreate, MarketTypeUpdate, MarketTypeOut, MarketTypeStat
+from app.schemas.schemas import (
+    MarketTypeCreate,
+    MarketTypeUpdate,
+    MarketTypeOut,
+    MarketTypeStat,
+)
+from app.utils.market_type_normalization import normalize_market_label
 
 router = APIRouter(prefix="/api/market-types", tags=["Typy sázek"])
 
 
 def _normalize_market_type_name(name: str) -> str:
-    """Trim, lowercase, normalizace čárek na tečky pro porovnání."""
-    if not name:
-        return ""
-    return name.strip().lower().replace(",", ".")
+    """Wrapper nad normalize_market_label pro zpětnou kompatibilitu."""
+    return normalize_market_label(name or "")
 
 
 @router.get("", response_model=List[MarketTypeOut])
@@ -96,10 +100,31 @@ def find_or_create_market_type(data: MarketTypeCreate, db: Session = Depends(get
     if not name:
         raise HTTPException(status_code=400, detail="Název nesmí být prázdný")
     normalized = _normalize_market_type_name(name)
+
+    # 1) Primární lookup podle canonical hodnoty (normalized_name)
+    existing = (
+        db.query(MarketType)
+        .filter(
+            MarketType.is_active == True,
+            MarketType.normalized_name == normalized,
+        )
+        .first()
+    )
+    if existing:
+        return _market_type_with_sports(db, existing.id)
+
+    # 2) Fallback pro starší záznamy bez normalized_name
     for mt in db.query(MarketType).filter(MarketType.is_active == True).all():
         if _normalize_market_type_name(mt.name) == normalized:
             return _market_type_with_sports(db, mt.id)
-    mt = MarketType(name=name, description=data.description, is_active=True)
+
+    # 3) Vytvořit nový typ
+    mt = MarketType(
+        name=name,
+        normalized_name=normalized,
+        description=data.description,
+        is_active=True,
+    )
     if data.sport_ids:
         sports = db.query(Sport).filter(Sport.id.in_(data.sport_ids)).all()
         mt.sports = sports
@@ -117,10 +142,12 @@ def create_market_type(data: MarketTypeCreate, db: Session = Depends(get_db)):
     existing = db.query(MarketType).filter(MarketType.name == data.name).first()
     if existing:
         raise HTTPException(status_code=400, detail="Tento typ sázky již existuje")
-    
+
+    normalized = _normalize_market_type_name(data.name)
+
     # Create the market type without sport_ids
     mt_data = data.model_dump(exclude={"sport_ids"})
-    mt = MarketType(**mt_data)
+    mt = MarketType(**mt_data, normalized_name=normalized)
     
     # Handle sports association
     if data.sport_ids:
@@ -144,8 +171,14 @@ def update_market_type(mt_id: int, data: MarketTypeUpdate, db: Session = Depends
         raise HTTPException(status_code=404, detail="Typ sázky nenalezen")
         
     update_data = data.model_dump(exclude_unset=True, exclude={"sport_ids"})
+    name_changed = False
     for key, value in update_data.items():
         setattr(mt, key, value)
+        if key == "name" and value is not None:
+            name_changed = True
+
+    if name_changed:
+        mt.normalized_name = _normalize_market_type_name(mt.name)
         
     # Handle sports updates
     if data.sport_ids is not None:

@@ -1,0 +1,246 @@
+* {
+  box-sizing: border-box;
+}
+
+/* Důležité: v author CSS máme pro .modal display:flex, což by přepsalo default HTML [hidden] => display:none.
+   Proto explicitně vynutíme skrytí elementů s hidden atributem. */
+[hidden] {
+  display: none !important;
+}
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  font-size: 13px;
+  background: #1a1b26;
+  color: #c0caf5;
+  min-width: 320px;
+  max-width: 420px;
+  user-select: none;
+}
+#app {
+  padding: 8px;
+  min-height: 200px;
+}
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #3b4261;
+}
+.header-actions {
+  flex-shrink: 0;
+}
+.title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.topmost-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  color: #a9b1d6;
+  cursor: pointer;
+}
+.topmost-toggle input {
+  cursor: pointer;
+}
+button {
+  background: #3b4261;
+  color: #c0caf5;
+  border: none;
+  border-radius: 6px;
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+button:hover {
+  background: #565f89;
+}
+.error {
+  color: #f7768e;
+  font-size: 0.8rem;
+  padding: 6px;
+  margin-bottom: 8px;
+  background: rgba(247, 118, 142, 0.1);
+  border-radius: 6px;
+}
+.section {
+  margin-bottom: 12px;
+}
+.section-title {
+  margin: 0 0 6px 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #7aa2f7;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.section-hint {
+  margin: 0 0 6px 0;
+  font-size: 0.7rem;
+  color: #a9b1d6;
+}
+.ticket-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.ticket-item {
+  padding: 8px 10px;
+  margin-bottom: 4px;
+  background: #24283b;
+  border-radius: 8px;
+  border-left: 3px solid #3b4261;
+  cursor: pointer;
+}
+.ticket-item:hover {
+  background: #2d3142;
+}
+.ticket-item.live {
+  border-left-color: #f7768e;
+}
+.ticket-row-header {
+  margin-bottom: 4px;
+}
+.ticket-source {
+  font-size: 0.7rem;
+  color: #7aa2f7;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.ticket-match {
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+.ticket-meta {
+  font-size: 0.75rem;
+  color: #a9b1d6;
+}
+.ticket-bet {
+  font-size: 0.8rem;
+  color: #7dcfff;
+  margin-top: 2px;
+}
+.ticket-snapshot {
+  font-size: 0.75rem;
+  color: #9ece6a;
+  margin-top: 4px;
+}
+.loading {
+  text-align: center;
+  padding: 16px;
+  color: #a9b1d6;
+}
+.data-hint {
+  font-size: 0.75rem;
+  color: #565f89;
+  margin: 12px 0 0;
+  padding: 8px 0;
+}
+/* Tauri WebView2: pouze hlavička je tažitelná, modal musí přijímat kliky */
+.modal,
+.modal-backdrop,
+.modal-content {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+.modal {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  cursor: default;
+}
+.modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  cursor: pointer;
+}
+.modal-content {
+  position: relative;
+  z-index: 1;
+  background: #24283b;
+  padding: 16px;
+  border-radius: 12px;
+  min-width: 280px;
+  pointer-events: auto;
+  cursor: default;
+}
+.modal-content button {
+  cursor: pointer;
+}
+.modal-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.modal-content h3 {
+  margin: 0;
+}
+.modal-close-x {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  font-size: 24px;
+  line-height: 1;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  background: #3b4261;
+  color: #c0caf5;
+  border: none;
+}
+.modal-close-x:hover {
+  background: #565f89;
+}
+.modal-close-x {
+  text-decoration: none;
+  color: inherit;
+}
+.modal-hint {
+  margin: 8px 0 0;
+  font-size: 0.75rem;
+  color: #a9b1d6;
+}
+.modal-hint kbd {
+  padding: 2px 6px;
+  background: #3b4261;
+  border-radius: 4px;
+}
+.modal-content label {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 0.85rem;
+}
+.modal-content input {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 6px 8px;
+  background: #1a1b26;
+  border: 1px solid #3b4261;
+  border-radius: 6px;
+  color: #c0caf5;
+}
+.modal-actions {
+  margin-top: 16px;
+  display: flex;
+  gap: 8px;
+}
