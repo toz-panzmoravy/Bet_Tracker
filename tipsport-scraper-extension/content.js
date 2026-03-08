@@ -7,6 +7,14 @@
     return /betano\.cz$/i.test(location.hostname) || /betano\.cz/i.test(location.hostname);
   }
 
+  function isBetanoBethistoryPage() {
+    return isBetanoPage() && /\/myaccount\/bethistory/i.test(location.pathname || "");
+  }
+
+  function isBetanoBethistoryOpenPage() {
+    return isBetanoPage() && /\/myaccount\/bethistory\/open/i.test(location.pathname || "");
+  }
+
   function isFortunaPage() {
     return /ifortuna\.cz$/i.test(location.hostname) || /ifortuna\.cz/i.test(location.hostname);
   }
@@ -143,7 +151,7 @@
     btn.style.alignItems = "center";
     btn.style.gap = "6px";
 
-    // Ikona LIVE (červené logo)
+    // Ikona (červené logo) – tlačítko pro sync do overlay
     try {
       const icon = document.createElement("span");
       icon.style.display = "inline-block";
@@ -160,7 +168,7 @@
     }
 
     const label = document.createElement("span");
-    label.textContent = "LIVE";
+    label.textContent = "OVERLAY";
     label.style.letterSpacing = "0.12em";
     label.style.textTransform = "uppercase";
     btn.appendChild(label);
@@ -659,37 +667,29 @@
           else if (label === "Celkový kurz") odds = num;
         });
 
-        // Stav tiketu: pouze ikona nebo Skutečná výhra. „Možná výhra“ = tiket ještě nevyhodnocen.
+        // Live tiket: Tipsport zobrazuje <div class="sc-837f7f43-0 inDuKt">Live</div>
+        let is_live = false;
+        const liveEl = card.querySelector(".inDuKt");
+        if (liveEl && liveEl.textContent.trim() === "Live") {
+          is_live = true;
+        }
+
+        // Stav tiketu
         let status_raw = null;
         const htmlLower = card.innerHTML;
         if (htmlLower.includes('href="#i170"')) status_raw = "won";
         else if (htmlLower.includes('href="#i243"')) status_raw = "void";
         else if (htmlLower.includes('href="#i173"')) status_raw = "lost";
-        else if (htmlLower.includes('href="#i172"')) status_raw = "unresolved";
-        if (!status_raw) {
-          if (payout != null) status_raw = payout > 0 ? "won" : "lost";
-          else if (hasMoznaVyhra) status_raw = "unresolved";
-          else status_raw = "open";
-        }
 
-        // Live tiket: Tipsport zobrazuje <div class="sc-837f7f43-0 inDuKt">Live</div>
-        // Záložní detekce: pokud Tipsport změní třídu .inDuKt, hledáme prvek s data-atid obsahujícím "live"
-        // nebo libovolný element v kartě, jehož text je přesně "Live" (viz docs/LIVE_DETECTION_TIPSPORT.md)
-        let is_live = false;
-        const liveEl = card.querySelector(".inDuKt");
-        if (liveEl && liveEl.textContent.trim() === "Live") {
-          is_live = true;
-        } else {
-          const byDataAtid = card.querySelector('[data-atid*="live" i]');
-          if (byDataAtid && byDataAtid.textContent.trim() === "Live") is_live = true;
-          else {
-            const nodes = card.querySelectorAll("div, span");
-            for (let i = 0; i < nodes.length; i++) {
-              if ((nodes[i].textContent || "").trim() === "Live" && nodes[i].children.length === 0) {
-                is_live = true;
-                break;
-              }
-            }
+        if (!status_raw) {
+          if (is_live) {
+            status_raw = "open"; // Live tikety musí jít do overlay
+          } else if (htmlLower.includes('href="#i172"')) {
+            status_raw = "unresolved"; // Zápas nezačal
+          } else {
+            // Nemá ani LIVE příznak, ani i172 ikonku = nepatří do otevřených
+            if (payout != null) status_raw = payout > 0 ? "won" : "lost";
+            else status_raw = "ignored"; // Přesně podle domluvy "Jiné tikety se nezobrazují v Overlay"
           }
         }
 
@@ -832,6 +832,66 @@
     return d.toISOString();
   }
 
+  /** Na stránce Betano bethistory zajistí filtr „Otevřeno“ (otevřené tikety). */
+  async function ensureBetanoOpenFilter() {
+    if (isBetanoBethistoryOpenPage()) return;
+    const openBtn = document.querySelector('[data-qa="bethistory-open-button"]');
+    if (!openBtn) return;
+    openBtn.click();
+    await new Promise((r) => setTimeout(r, 1200));
+  }
+
+  /** Na stránce Betano bethistory scrolluje seznam (infinite scroll), aby se načetly všechny karty. */
+  async function scrollBetanoTicketList() {
+    const drawer = document.querySelector('[data-qa="drawer-item"]');
+    const scroller = document.querySelector(".vue-recycle-scroller");
+    const el = drawer || scroller;
+    if (!el) return;
+    const delay = (ms) => new Promise((r) => setTimeout(r, ms));
+    let prevCount = document.querySelectorAll('[data-qa="bethistory-content"]').length;
+    for (let i = 0; i < 15; i++) {
+      el.scrollTop = el.scrollHeight;
+      await delay(400);
+      const count = document.querySelectorAll('[data-qa="bethistory-content"]').length;
+      if (count === prevCount) break;
+      prevCount = count;
+    }
+    await delay(500);
+  }
+
+  /** Na stránce Betano (bethistory i jiné) rozbalí sbalené karty, aby scraper viděl Live/detail. */
+  async function expandBetanoCardsBeforeScrape() {
+    const delay = (ms) => new Promise((r) => setTimeout(r, ms));
+    const contents = document.querySelectorAll('[data-qa="bethistory-content"]');
+    if (!contents.length) return;
+    for (let i = 0; i < contents.length; i++) {
+      const content = contents[i];
+      const cardRoot = content.closest('div[data-index]') || content.parentElement;
+      if (!cardRoot) continue;
+      const hasVisibleLive =
+        cardRoot.querySelector('[data-qa*="live" i], .leg-scoreboard-container, [data-qa="leg-scoreboard-container"], [data-qa="thunder-icon"], path[fill="#F3D113"]') ||
+        /\b(live|živě)\b/i.test((cardRoot.textContent || "").trim());
+      if (hasVisibleLive) continue;
+      let toggle =
+        cardRoot.querySelector('[data-qa="action-toggle"]') ||
+        cardRoot.querySelector('[data-qa="toggle-button"]') ||
+        cardRoot.querySelector('button[aria-expanded]') ||
+        cardRoot.querySelector('[aria-expanded]')?.closest('button') ||
+        cardRoot.querySelector('button[class*="expand"], button[class*="collapse"]');
+      if (!toggle) {
+        const header = cardRoot.querySelector('[data-qa="bethistory-type"]')?.closest('section') ||
+          cardRoot.querySelector('[data-qa="bethistory-stake"]')?.closest('div')?.parentElement ||
+          cardRoot.firstElementChild;
+        if (header && header.offsetParent !== null) toggle = header;
+      }
+      if (toggle && toggle.getAttribute?.("aria-expanded") !== "true") {
+        toggle.click();
+        await delay(400);
+      }
+    }
+    await delay(600);
+  }
+
   function scrapeBetanoTicketsFromPage() {
     const results = [];
 
@@ -902,28 +962,37 @@
           away_team = (parts[1] || "").trim();
         }
 
-        // sport – z <img alt=\"sport-icon\" src=\".../ICEH...svg\">
-        const sportImg = firstContentBlock.querySelector('img[alt="sport-icon"]');
+        // sport – z <img alt="sport-icon" src=".../ICEH...svg"> (hledat v cele kartě, ne jen v firstContentBlock)
+        const sportImg = cardRoot.querySelector('img[alt="sport-icon"]') || content.querySelector('img[alt="sport-icon"]');
         let sport_icon_id = null;
         let sport_label = null;
         if (sportImg) {
           const src = sportImg.getAttribute("src") || "";
           sport_icon_id = src;
-          // hrubé mapování podle prefixu ve jménu souboru
+          // mapování podle prefixu ve jménu souboru (Ticket_Mapping: BASK, ICEH, FOOT, HAND, TENN, ESPS)
           if (src.includes("BASK")) sport_label = "Basketbal";
           else if (src.includes("ICEH")) sport_label = "Hokej";
           else if (src.includes("FOOT")) sport_label = "Fotbal";
+          else if (src.includes("HAND")) sport_label = "Házená";
           else if (src.includes("TENN")) sport_label = "Tenis";
+          else if (src.includes("ESPS")) sport_label = "Esport";
         }
 
-        // Live tiket: Betano může zobrazovat badge/text "Live" v kartě
+        // Live = „Právě se hraje“: žlutý blesk (path fill="#F3D113"), scoreboard nebo text Live/Živě
         let is_live = false;
+        if (cardRoot.querySelector('path[fill="#F3D113"]')) is_live = true;
+        if (!is_live && cardRoot.querySelector('.leg-scoreboard-container, [data-qa="leg-scoreboard-container"], [data-qa="thunder-icon"]')) is_live = true;
         const liveByQa = cardRoot.querySelector('[data-qa*="live" i]');
-        if (liveByQa && (liveByQa.textContent || "").trim() === "Live") is_live = true;
-        else {
+        if (!is_live && liveByQa && (liveByQa.textContent || "").trim() === "Live") is_live = true;
+        if (!is_live) {
+          const cardText = (cardRoot.textContent || "").trim();
+          if (/^live$/i.test(cardText) || /\blive\b/i.test(cardText) || /\bživě\b/i.test(cardText)) is_live = true;
+        }
+        if (!is_live) {
           const nodes = cardRoot.querySelectorAll("div, span");
           for (let i = 0; i < nodes.length; i++) {
-            if ((nodes[i].textContent || "").trim() === "Live" && nodes[i].children.length === 0) {
+            const txt = (nodes[i].textContent || "").trim();
+            if ((txt === "Live" || txt === "Živě") && nodes[i].children.length === 0) {
               is_live = true;
               break;
             }
@@ -984,226 +1053,256 @@
 
   /** Parsuje relativní datum z popupu Fortuna např. "zítra 01:30", "dnes 18:45". */
   function parseFortunaRelativeDate(raw) {
-    if (!raw) return null;
-    const clean = raw.trim().toLowerCase();
-    const timeMatch = clean.match(/(\d{1,2}):(\d{2})/);
-    if (!timeMatch) return null;
-    let hour = parseInt(timeMatch[1], 10);
-    const minute = parseInt(timeMatch[2], 10);
-    const d = new Date();
-    d.setHours(hour, minute, 0, 0);
-    if (clean.includes("zítra") || clean.includes("zitra")) {
-      d.setDate(d.getDate() + 1);
-    } else if (clean.includes("pozítří") || clean.includes("pozitri")) {
-      d.setDate(d.getDate() + 2);
-    } else if (!clean.includes("dnes")) {
-      if (d.getTime() < Date.now()) d.setDate(d.getDate() + 1);
+    try {
+      if (!raw || typeof raw !== "string") return null;
+      const clean = raw.trim().toLowerCase();
+      const timeMatch = clean.match(/(\d{1,2}):(\d{2})/);
+      if (!timeMatch) return null;
+      const hour = parseInt(timeMatch[1], 10);
+      const minute = parseInt(timeMatch[2], 10);
+      if (isNaN(hour) || isNaN(minute)) return null;
+      const d = new Date();
+      d.setHours(hour, minute, 0, 0);
+      if (clean.includes("zítra") || clean.includes("zitra")) {
+        d.setDate(d.getDate() + 1);
+      } else if (clean.includes("pozítří") || clean.includes("pozitri")) {
+        d.setDate(d.getDate() + 2);
+      } else if (!clean.includes("dnes")) {
+        if (d.getTime() < Date.now()) d.setDate(d.getDate() + 1);
+      }
+      return d.toISOString();
+    } catch (e) {
+      return null;
     }
-    return d.toISOString();
   }
 
   function scrapeFortunaTicketsFromPage() {
-    const results = [];
-    const listEl = document.querySelector('[data-test="betslip-history-overview_list"]');
-    if (!listEl) return results;
+    try {
+      const results = [];
+      const listEl = document.querySelector('[data-test="betslip-history-overview_list"]');
+      if (!listEl) return results;
 
-    const items = listEl.querySelectorAll("a.betslip-history-list__item");
-    items.forEach((card) => {
-      try {
-        const row = card.querySelector(".betslip-history-overview-row");
-        if (!row) return;
+      const items = listEl.querySelectorAll("a.betslip-history-list__item");
+      items.forEach((card) => {
+        try {
+          const row = card.querySelector(".betslip-history-overview-row");
+          if (!row) return;
 
-        const headingEl = row.querySelector(".betslip-history-overview-row__heading span");
-        const matchText = (headingEl && headingEl.textContent) || "";
-        const parts = matchText.split(" - ");
-        const home_team = (parts[0] || "").trim();
-        const away_team = (parts[1] || "").trim();
-        if (!home_team && !away_team) return;
+          const headingEl = row.querySelector(".betslip-history-overview-row__heading span");
+          const matchText = (headingEl && headingEl.textContent) || "";
+          const parts = matchText.split(" - ");
+          const home_team = (parts[0] || "").trim();
+          const away_team = (parts[1] || "").trim();
+          if (!home_team && !away_team) return;
 
-        const timeEl = row.querySelector(".betslip-history-overview-row__datetime time");
-        const placed_at = timeEl ? parseFortunaDateTime(timeEl.getAttribute("datetime")) : null;
-        // Typ tiketu (Solo / Ako) je ve stejném řádku jako <time>, ale mimo samotný <time>.
-        let ticket_type_raw = "Solo";
-        const dateContainer = row.querySelector(".betslip-history-overview-row__datetime .betslip-history-overview-row__sub-heading");
-        const dateTimeText = (dateContainer && dateContainer.textContent) || "";
-        if (/ako/i.test(dateTimeText)) ticket_type_raw = "Ako";
-        else if (/solo/i.test(dateTimeText)) ticket_type_raw = "Solo";
-        const isAku = ticket_type_raw && ticket_type_raw.toLowerCase().includes("ako");
-        // Varianta A: AKO tikety z přehledu přeskočíme – uživatel je naimportuje z detailu.
-        if (isAku) return;
+          const timeEl = row.querySelector(".betslip-history-overview-row__datetime time");
+          const placed_at = timeEl ? parseFortunaDateTime(timeEl.getAttribute("datetime")) : null;
+          // Typ tiketu (Solo / Ako) je ve stejném řádku jako <time>, ale mimo samotný <time>.
+          let ticket_type_raw = "Solo";
+          const dateContainer = row.querySelector(".betslip-history-overview-row__datetime .betslip-history-overview-row__sub-heading");
+          const dateTimeText = (dateContainer && dateContainer.textContent) || "";
+          if (/ako/i.test(dateTimeText)) ticket_type_raw = "Ako";
+          else if (/solo/i.test(dateTimeText)) ticket_type_raw = "Solo";
+          const isAku = ticket_type_raw && ticket_type_raw.toLowerCase().includes("ako");
+          // Varianta A: AKO tikety z přehledu přeskočíme – uživatel je naimportuje z detailu.
+          if (isAku) return;
 
-        const ellipsisEl = row.querySelector(".betslip-history-overview-row__ellipsis span");
-        let market_label_raw = null;
-        let selection_raw = null;
-        if (ellipsisEl) {
-          const full = (ellipsisEl.textContent || "").trim();
-          const colonIdx = full.indexOf(":");
-          if (colonIdx > 0) {
-            market_label_raw = full.slice(0, colonIdx).trim();
-            selection_raw = full.slice(colonIdx + 1).trim();
-          } else {
-            selection_raw = full || null;
+          const ellipsisEl = row.querySelector(".betslip-history-overview-row__ellipsis span");
+          let market_label_raw = null;
+          let selection_raw = null;
+          if (ellipsisEl) {
+            const full = (ellipsisEl.textContent || "").trim();
+            const colonIdx = full.indexOf(":");
+            if (colonIdx > 0) {
+              market_label_raw = full.slice(0, colonIdx).trim();
+              selection_raw = full.slice(colonIdx + 1).trim();
+            } else {
+              selection_raw = full || null;
+            }
           }
+
+          let stake = null;
+          let odds = null;
+          let payout = null;
+          const footer = row.querySelector(".betslip-history-overview-row__footer");
+          if (footer) {
+            footer.querySelectorAll(".betslip-history-overview-row__section").forEach((section) => {
+              const subHeadings = section.querySelectorAll(".betslip-history-overview-row__sub-heading");
+              const labelEl = subHeadings[0];
+              const valueEl = section.querySelector(".betslip-history-overview-row__value");
+              const label = labelEl ? (labelEl.textContent || "").trim() : "";
+              const num = valueEl ? parseNumber(valueEl.textContent) : null;
+              if (label === "Vklad") stake = num;
+              else if (label === "Celkový kurz") odds = num;
+              else if (label === "Skutečná výhra" || label === "Výhra") payout = num;
+              else if (label === "Možná výhra" && payout == null) payout = num;
+            });
+          }
+
+          let status_raw = "open";
+          const statusEl = row.querySelector(".betslip-status");
+          if (statusEl) {
+            if (statusEl.classList.contains("cic_ticket-win")) status_raw = "won";
+            else if (statusEl.classList.contains("cic_ticket-lost") || statusEl.classList.contains("cic_ticket-loss")) status_raw = "lost";
+            else if (statusEl.classList.contains("cic_ticket-void")) status_raw = "void";
+            else if (statusEl.classList.contains("cic_ticket-waiting")) status_raw = "waiting";
+          }
+          if (payout != null && payout > 0 && status_raw === "open") status_raw = "won";
+          /* Nepřepisovat open na lost jen kvůli payout=0 – nevyhodnocené tikety mívají 0, backend to řeší. */
+
+          const href = card.getAttribute("href") || card.href || "";
+          const fortuna_key =
+            (typeof href === "string" && href.length > 0)
+              ? (href.indexOf("http") === 0 ? href : (location.origin || "") + (href.charAt(0) === "/" ? href : "/" + href))
+              : (placed_at || "") + "|" + home_team + "|" + away_team + "|" + (stake || 0) + "|" + (odds || 0);
+
+          const ticket = {
+            home_team: home_team || "—",
+            away_team: away_team || "—",
+            fortuna_key,
+            market_label_raw,
+            selection_raw,
+            ticket_type_raw,
+            status_raw,
+            stake: stake ?? 0,
+            payout: payout,
+            odds: odds,
+            placed_at,
+            event_start_at: placed_at || undefined,
+            is_live: false
+          };
+          if (ticket.stake > 0) results.push(ticket);
+        } catch (e) {
+          console.warn("BetTracker Fortuna scraper – chyba při čtení položky:", e);
         }
-
-        let stake = null;
-        let odds = null;
-        let payout = null;
-        const footer = row.querySelector(".betslip-history-overview-row__footer");
-        if (footer) {
-          footer.querySelectorAll(".betslip-history-overview-row__section").forEach((section) => {
-            const subHeadings = section.querySelectorAll(".betslip-history-overview-row__sub-heading");
-            const labelEl = subHeadings[0];
-            const valueEl = section.querySelector(".betslip-history-overview-row__value");
-            const label = labelEl ? (labelEl.textContent || "").trim() : "";
-            const num = valueEl ? parseNumber(valueEl.textContent) : null;
-            if (label === "Vklad") stake = num;
-            else if (label === "Celkový kurz") odds = num;
-            else if (label === "Skutečná výhra" || label === "Výhra") payout = num;
-            else if (label === "Možná výhra" && payout == null) payout = num;
-          });
-        }
-
-        let status_raw = "open";
-        const statusEl = row.querySelector(".betslip-status");
-        if (statusEl) {
-          if (statusEl.classList.contains("cic_ticket-win")) status_raw = "won";
-          else if (statusEl.classList.contains("cic_ticket-lost")) status_raw = "lost";
-          else if (statusEl.classList.contains("cic_ticket-void")) status_raw = "void";
-          else if (statusEl.classList.contains("cic_ticket-waiting")) status_raw = "waiting";
-        }
-        if (payout != null && payout > 0 && status_raw === "open") status_raw = "won";
-        /* Nepřepisovat open na lost jen kvůli payout=0 – nevyhodnocené tikety mívají 0, backend to řeší. */
-
-        const href = card.getAttribute("href") || card.href || "";
-        const fortuna_key =
-          (typeof href === "string" && href.length > 0)
-            ? (href.indexOf("http") === 0 ? href : (location.origin || "") + (href.charAt(0) === "/" ? href : "/" + href))
-            : (placed_at || "") + "|" + home_team + "|" + away_team + "|" + (stake || 0) + "|" + (odds || 0);
-
-        const ticket = {
-          home_team: home_team || "—",
-          away_team: away_team || "—",
-          fortuna_key,
-          market_label_raw,
-          selection_raw,
-          ticket_type_raw,
-          status_raw,
-          stake: stake ?? 0,
-          payout: payout,
-          odds: odds,
-          placed_at,
-          event_start_at: placed_at || undefined,
-          is_live: false
-        };
-        if (ticket.stake > 0) results.push(ticket);
-      } catch (e) {
-        console.warn("BetTracker Fortuna scraper – chyba při čtení položky:", e);
-      }
-    });
-    return results;
+      });
+      return results;
+    } catch (e) {
+      console.warn("BetTracker Fortuna scraper – chyba:", e);
+      return [];
+    }
   }
 
   function scrapeFortunaDetailTicket() {
-    const panel = document.querySelector(".betslip-history-detail__left-panel");
-    if (!panel) return [];
+    try {
+      const detailPanel = document.querySelector(".betslip-history-detail__left-panel");
+      if (!detailPanel) return [];
 
-    const legs = Array.from(panel.querySelectorAll(".betslip-leg"));
-    if (!legs.length) return [];
+      const legs = Array.from(detailPanel.querySelectorAll(".betslip-leg"));
+      if (!legs.length) return [];
 
-    // Z prvního zápasu vezmeme název pro ticket (AKO kombinace)
-    let home_team = "";
-    let away_team = "";
-    const firstTitleEl =
-      legs[0].querySelector("h3[title]") ||
-      legs[0].querySelector("h3");
-    if (firstTitleEl) {
-      const matchText = (firstTitleEl.textContent || "").trim();
-      const parts = matchText.split(" - ");
-      home_team = (parts[0] || "").trim();
-      away_team = (parts[1] || "").trim();
-    }
-
-    // Status kombinace podle jednotlivých příležitostí
-    let anyLost = false;
-    let anyWaiting = false;
-    let allWon = true;
-
-    legs.forEach((leg) => {
-      let legStatus = "open";
-      const actions = leg.querySelector(".betslip-leg__actions");
-      if (actions) {
-        const useEl =
-          actions.querySelector('use[href="#cic_ticket-win"], use[xlink\\:href="#cic_ticket-win"]') ||
-          actions.querySelector("use");
-        const href =
-          (useEl && (useEl.getAttribute("href") || useEl.getAttribute("xlink:href"))) ||
-          "";
-        const h = href.toLowerCase();
-        if (h.includes("ticket-win")) legStatus = "won";
-        else if (h.includes("ticket-lost") || h.includes("ticket-lose")) legStatus = "lost";
-        else if (h.includes("ticket-waiting")) legStatus = "waiting";
+      // Z prvního zápasu vezmeme název pro ticket (AKO kombinace)
+      let home_team = "";
+      let away_team = "";
+      const firstTitleEl =
+        legs[0].querySelector("h3[title]") ||
+        legs[0].querySelector("h3");
+      if (firstTitleEl) {
+        const matchText = (firstTitleEl.textContent || "").trim();
+        const parts = matchText.split(" - ");
+        home_team = (parts[0] || "").trim();
+        away_team = (parts[1] || "").trim();
       }
 
-      if (legStatus === "lost") {
-        anyLost = true;
-        allWon = false;
-      } else if (legStatus === "won") {
-        // ok
-      } else {
-        anyWaiting = true;
-        allWon = false;
-      }
-    });
+      // Status kombinace podle jednotlivých příležitostí
+      let anyLost = false;
+      let anyWaiting = false;
+      let allWon = true;
 
-    let status_raw = "open";
-    if (anyLost) status_raw = "lost";
-    else if (allWon) status_raw = "won";
-    else if (anyWaiting) status_raw = "waiting";
+      legs.forEach((leg) => {
+        let legStatus = "open";
+        const actions = leg.querySelector(".betslip-leg__actions");
+        if (actions) {
+          const useEl =
+            actions.querySelector('use[href="#cic_ticket-win"], use[xlink\\:href="#cic_ticket-win"]') ||
+            actions.querySelector("use");
+          const href =
+            (useEl && (useEl.getAttribute("href") || useEl.getAttribute("xlink:href"))) ||
+            "";
+          const h = href.toLowerCase();
+          if (h.includes("ticket-win")) legStatus = "won";
+          else if (h.includes("ticket-lost") || h.includes("ticket-lose")) legStatus = "lost";
+          else if (h.includes("ticket-waiting")) legStatus = "waiting";
+        }
 
-    // Celkový kurz, vklad a výhra z pravého panelu
-    let stake = null;
-    let odds = null;
-    let payout = null;
-    const money = document.querySelector(".betslip-dates-money");
-    if (money) {
-      money.querySelectorAll(".waiting").forEach((row) => {
-        const spans = row.querySelectorAll("span");
-        if (spans.length < 2) return;
-        const label = (spans[0].textContent || "").trim();
-        const valueText = (spans[1].textContent || "").trim();
-        const num = parseNumber(valueText);
-        if (label.startsWith("Celkový kurz")) odds = num;
-        else if (label.startsWith("Celková sázka")) stake = num;
-        else if (label.startsWith("Skutečná výhra") || label.startsWith("Možná výhra")) {
-          payout = num;
+        if (legStatus === "lost") {
+          anyLost = true;
+          allWon = false;
+        } else if (legStatus === "won") {
+          // ok
+        } else {
+          anyWaiting = true;
+          allWon = false;
         }
       });
-    }
 
-    const fortuna_key = location.href;
+      let status_raw = "open";
+      if (anyLost) status_raw = "lost";
+      else if (allWon) status_raw = "won";
+      else if (anyWaiting) status_raw = "waiting";
 
-    const ticket = {
-      home_team: home_team || "AKO",
-      away_team: away_team || "Kombinace",
-      fortuna_key,
-      market_label_raw: null,
-      selection_raw: null,
-      ticket_type_raw: "Ako",
-      status_raw,
-      stake: stake ?? 0,
-      payout,
-      odds,
-      placed_at: null,
-      event_start_at: undefined,
-      is_live: false
-    };
+      // Celkový kurz, vklad a výhra z pravého panelu
+      let stake = null;
+      let odds = null;
+      let payout = null;
+      const money = document.querySelector(".betslip-dates-money");
+      if (money) {
+        money.querySelectorAll(".waiting").forEach((row) => {
+          const spans = row.querySelectorAll("span");
+          if (spans.length < 2) return;
+          const label = (spans[0].textContent || "").trim();
+          const valueText = (spans[1].textContent || "").trim();
+          const num = parseNumber(valueText);
+          if (label.startsWith("Celkový kurz")) odds = num;
+          else if (label.startsWith("Celková sázka")) stake = num;
+          else if (label.startsWith("Skutečná výhra") || label.startsWith("Možná výhra")) {
+            payout = num;
+          }
+        });
+      }
 
-    if (!ticket.stake || ticket.stake <= 0) {
-      console.warn("BetTracker Fortuna detail scraper – AKO bez rozpoznaného vkladu, přeskakuji.");
+      const fortuna_key = location.href;
+
+      let sport_icon_id = null;
+      const detailRoot = document.querySelector(".betslip-history-detail") || detailPanel;
+      const sportImg = detailRoot.querySelector('img[alt*="ufo:sprt:"], img[src*="ufo-sprt-"], img[src*="ifortuna.cz/sports"]');
+      if (sportImg) {
+        if (sportImg.src) {
+          const m = sportImg.src.match(/ufo-sprt-([a-z0-9]+)\.png/i);
+          if (m) sport_icon_id = m[1];
+        }
+        if (!sport_icon_id && sportImg.getAttribute("alt")) {
+          const altM = sportImg.getAttribute("alt").match(/ufo:sprt:([a-z0-9]+)\.png/i);
+          if (altM) sport_icon_id = altM[1];
+        }
+      }
+
+      const ticket = {
+        home_team: home_team || "AKO",
+        away_team: away_team || "Kombinace",
+        fortuna_key,
+        sport_icon_id: sport_icon_id || undefined,
+        market_label_raw: null,
+        selection_raw: null,
+        ticket_type_raw: "Ako",
+        status_raw,
+        stake: stake ?? 0,
+        payout,
+        odds,
+        placed_at: null,
+        event_start_at: undefined,
+        is_live: false
+      };
+
+      if (!ticket.stake || ticket.stake <= 0) {
+        console.warn("BetTracker Fortuna detail scraper – AKO bez rozpoznaného vkladu, přeskakuji.");
+        return [];
+      }
+      return [ticket];
+    } catch (e) {
+      console.warn("BetTracker Fortuna detail scraper – chyba:", e);
       return [];
     }
-    return [ticket];
   }
 
   function scrapeBetanoSidebarTickets() {
@@ -1225,15 +1324,21 @@
         if (!event_start_at) return;
 
         // Týmy
-        const matchEl = card.querySelector('.event-name, [data-qa="event-info-link"], .tw-text-licorice, [class*="match"]');
+        const matchEl = card.querySelector('.event-name, [data-qa="event-info-link"], .tw-text-licorice, [class*="match"], .participants');
         let home_team = "";
         let away_team = "";
         if (matchEl) {
-          const matchText = matchEl.textContent.replace(/\s+/g, " ").trim();
-          const parts = matchText.split(" - ");
-          if (parts.length > 1) {
-            home_team = (parts[0] || "").trim();
-            away_team = (parts[1] || "").trim();
+          const participantNames = matchEl.querySelectorAll('.participants__participant-name');
+          if (participantNames && participantNames.length >= 2) {
+            home_team = participantNames[0].textContent.trim();
+            away_team = participantNames[1].textContent.trim();
+          } else {
+            const matchText = matchEl.textContent.replace(/\s+/g, " ").trim();
+            const parts = matchText.split(" - ");
+            if (parts.length > 1) {
+              home_team = (parts[0] || "").trim();
+              away_team = (parts[1] || "").trim();
+            }
           }
         }
 
@@ -1262,6 +1367,23 @@
           market_label_raw = marketEl.textContent.trim();
         }
 
+        let odds = null;
+        let oddsEl = card.querySelector('[data-qa="bet-odds"], .odds-ticker');
+        if (oddsEl) odds = parseNumber(oddsEl.textContent);
+
+        let payout = null;
+        const totalAmountValues = card.querySelectorAll('[data-qa="total-amounts-item-value"]');
+        if (totalAmountValues.length > 0) {
+          payout = parseNumber(totalAmountValues[totalAmountValues.length - 1].textContent);
+        }
+
+        let is_live = false;
+        if (card.querySelector('path[fill="#F3D113"]') || card.querySelector('path[fill="var(--kds-sem-color-fg-primary-bold)"]')) {
+          is_live = true;
+        }
+        if (!is_live && card.querySelector('.leg-scoreboard-container, [data-qa="leg-scoreboard-container"], [data-qa="thunder-icon"]')) is_live = true;
+        if (!is_live && card.querySelector('.time-info')) is_live = true;
+
         if (home_team && away_team) {
           const fakeKey = "sidebar_" + home_team.replace(/\s/g, "") + "_" + away_team.replace(/\s/g, "");
           results.push({
@@ -1273,7 +1395,10 @@
             selection_raw,
             market_label_raw,
             status_raw: 'open', // je to panel Otevřeno
-            stake: stake || 1 // Pokud nenašel sázku, dá 1 aby přežil filtr
+            stake: stake || 1, // Pokud nenašel sázku, dá 1 aby přežil filtr
+            odds,
+            payout,
+            is_live
           });
         }
       } catch (e) { }
@@ -1285,19 +1410,38 @@
   // Společná komunikace s backendem
   // ──────────────────────────────────────────────
 
-  async function sendToApi(tickets, source, usePreview) {
+  const API_BASE_DEFAULT = "http://127.0.0.1:15555/api";
+  function normalizeApiBase(url) {
+    if (!url || typeof url !== "string") return API_BASE_DEFAULT;
+    const u = String(url).trim();
+    if (!u) return API_BASE_DEFAULT;
+    if (/:3000(\/|$)/.test(u) || /:3001(\/|$)/.test(u)) return API_BASE_DEFAULT;
+    return u;
+  }
+
+  async function sendToApi(tickets, source, usePreview, overlaySync) {
     if (usePreview === undefined) usePreview = true;
+    if (overlaySync === undefined) overlaySync = false;
     const hasRuntime =
       typeof chrome !== "undefined" &&
       chrome &&
       chrome.runtime &&
       typeof chrome.runtime.sendMessage === "function";
 
-    const API_BASE = "http://127.0.0.1:8000/api";
+    let API_BASE = API_BASE_DEFAULT;
+    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+      try {
+        const r = await new Promise(function (resolve) {
+          chrome.storage.local.get(["bettracker_api_url"], resolve);
+        });
+        API_BASE = normalizeApiBase((r && r.bettracker_api_url) || "") || API_BASE_DEFAULT;
+      } catch (_) { }
+    }
     const payload = { tickets: tickets || [] };
-    let endpoint = `${API_BASE}/import/tipsport/scrape${usePreview ? "/preview" : ""}`;
-    if (source === "betano") endpoint = `${API_BASE}/import/betano/scrape${usePreview ? "/preview" : ""}`;
-    else if (source === "fortuna") endpoint = `${API_BASE}/import/fortuna/scrape${usePreview ? "/preview" : ""}`;
+    if (overlaySync) payload.overlay_sync = true;
+    let endpoint = `${API_BASE.replace(/\/$/, "")}/import/tipsport/scrape${usePreview ? "/preview" : ""}`;
+    if (source === "betano") endpoint = `${API_BASE.replace(/\/$/, "")}/import/betano/scrape${usePreview ? "/preview" : ""}`;
+    else if (source === "fortuna") endpoint = `${API_BASE.replace(/\/$/, "")}/import/fortuna/scrape${usePreview ? "/preview" : ""}`;
 
     async function directFetch() {
       const res = await fetch(endpoint, {
@@ -1330,7 +1474,8 @@
             type: "bettracker-import-tickets",
             source: source || "tipsport",
             tickets,
-            preview: usePreview !== false
+            preview: usePreview !== false,
+            overlay_sync: overlaySync === true
           },
           (response) => {
             if (chrome.runtime.lastError) {
@@ -2200,17 +2345,135 @@
 
   let akuImportState = null;
 
+  /**
+   * Na stránce Moje tikety (Tipsport) najde záložky Otevřeno, Výhry, Prohry, Vráceno.
+   * Vrací pole { element, label } pro každou nalezenou záložku (bez duplicit).
+   */
+  function getTipsportTabButtons() {
+    const tabLabels = ["Otevřeno", "Výhry", "Prohry", "Vráceno"];
+    const candidates = document.querySelectorAll('button, a, [role="tab"]');
+    let tabBar = null;
+    for (const el of candidates) {
+      const text = (el.textContent || "").trim();
+      if (tabLabels.includes(text)) {
+        tabBar = el.parentElement;
+        break;
+      }
+    }
+    if (!tabBar) return [];
+    const seen = new Set();
+    const out = [];
+    tabBar.querySelectorAll("button, a, [role=tab]").forEach((el) => {
+      const text = (el.textContent || "").trim();
+      if (tabLabels.includes(text) && !seen.has(text)) {
+        seen.add(text);
+        out.push({ element: el, label: text });
+      }
+    });
+    return out;
+  }
+
+  /**
+   * Scrapuje tikety ze všech záložek (Otevřeno, Výhry, Prohry, Vráceno).
+   * U duplicit (stejný tipsport_key) preferuje vyhodnocený stav (won/lost/void) před open/unresolved,
+   * aby backend mohl aktualizovat tikety se stavem "čeká" na výhra/prohra/vráceno.
+   */
+  async function scrapeTipsportTicketsFromAllTabs() {
+    const tabButtons = getTipsportTabButtons();
+    const byKey = new Map();
+
+    const delay = (ms) => new Promise((r) => setTimeout(r, ms));
+
+    const processTab = async (tabInfo) => {
+      if (tabInfo && tabInfo.element) {
+        tabInfo.element.click();
+        await delay(1800);
+        await scrollTipsportListToLoadAll();
+        const list = scrapeTipsportTicketsFromPage();
+        list.forEach((t) => {
+          const key = t.tipsport_key || t.ticket_href || `${t.home_team}|${t.away_team}|${t.stake}|${t.placed_at}`;
+          const existing = byKey.get(key);
+          const newStatus = (t.status_raw || "").toString().toLowerCase();
+          const isResolved = ["won", "lost", "void"].includes(newStatus);
+          const existingResolved = existing && ["won", "lost", "void"].includes((existing.status_raw || "").toString().toLowerCase());
+          if (!existing) {
+            byKey.set(key, t);
+          } else if (isResolved && !existingResolved) {
+            byKey.set(key, t);
+          } else if (isResolved || !existingResolved) {
+            byKey.set(key, t);
+          }
+        });
+      }
+    };
+
+    if (tabButtons.length >= 2) {
+      for (const tab of tabButtons) {
+        await processTab(tab);
+      }
+      return Array.from(byKey.values());
+    }
+
+    await scrollTipsportListToLoadAll();
+    return scrapeTipsportTicketsFromPage();
+  }
+
+  /** Na Tipsportu posune stránku / seznam dolů, aby se načetly lazy-loadované tikety. */
+  async function scrollTipsportListToLoadAll() {
+    const scrollStep = 800;
+    const pauseMs = 400;
+    const maxSteps = 30;
+    let lastCount = 0;
+    let sameCount = 0;
+    for (let step = 0; step < maxSteps; step++) {
+      const cards = document.querySelectorAll('a[data-atid^="ticketListItem"]');
+      if (cards.length > 0 && cards.length === lastCount) {
+        sameCount++;
+        if (sameCount >= 3) break;
+      } else {
+        sameCount = 0;
+      }
+      lastCount = cards.length;
+      window.scrollBy(0, scrollStep);
+      document.documentElement.scrollTop += scrollStep;
+      const scrollables = document.querySelectorAll('[style*="overflow"], [class*="scroll"]');
+      scrollables.forEach((el) => {
+        if (el.scrollHeight > el.clientHeight) {
+          el.scrollTop = el.scrollHeight;
+        }
+      });
+      await new Promise((r) => setTimeout(r, pauseMs));
+    }
+  }
+
   async function handleImportClick() {
     try {
       let source = null;
       let tickets = [];
       if (isTipsportPage()) {
         source = "tipsport";
-        tickets = scrapeTipsportTicketsFromPage();
-        tickets = tickets.filter(function (t) { return t.status_raw !== "unresolved"; });
+        if (isTipsportMojeTikety()) {
+          // Scrapujeme všechny záložky (Otevřeno, Výhry, Prohry, Vráceno), aby backend
+          // mohl aktualizovat tikety se stavem "čeká" na výhra/prohra/vráceno.
+          tickets = await scrapeTipsportTicketsFromAllTabs();
+        } else {
+          await scrollTipsportListToLoadAll();
+          tickets = scrapeTipsportTicketsFromPage();
+        }
       } else if (isBetanoPage()) {
         source = "betano";
-        tickets = scrapeBetanoTicketsFromPage();
+        const hasHomepageMyBets = document.querySelector('#my-bets-section [data-qa="bet-list"]');
+        if (hasHomepageMyBets) {
+          tickets = await scrapeBetanoFromHomepageWithExpand();
+        } else {
+          if (isBetanoBethistoryPage()) {
+            await ensureBetanoOpenFilter();
+            await scrollBetanoTicketList();
+          }
+          await expandBetanoCardsBeforeScrape();
+          tickets = scrapeBetanoTicketsFromPage();
+          enrichBetanoTicketsWithSidebarEventTime(tickets);
+        }
       } else if (isFortunaPage()) {
         source = "fortuna";
         const hasOverview = document.querySelector('[data-test="betslip-history-overview_list"]');
@@ -2219,6 +2482,9 @@
           tickets = scrapeFortunaDetailTicket();
         } else {
           tickets = scrapeFortunaTicketsFromPage();
+          if (tickets.length > 0) {
+            await enrichFortunaTicketsWithDetailDate(tickets);
+          }
         }
       } else {
         alert("BetTracker: Tato stránka není podporovaná pro import tiketů.");
@@ -2227,7 +2493,7 @@
       if (!tickets.length) {
         alert(
           "BetTracker: Na stránce se nepodařilo najít žádné tikety k importu.\n\n" +
-          "Tikety se stavem „nevyhodnoceno“ se neimportují – zkuste to znovu po vyhodnocení zápasů."
+          "Ujistěte se, že jste na Moje tikety a že se seznam načetl (příp. posuňte stránku dolů, aby se načetly další tikety)."
         );
         return;
       }
@@ -2238,7 +2504,7 @@
       // - existující aktualizuje / přeskočí.
       const result = await sendToApi(tickets, source, false);
 
-      const APP_BASE = "http://localhost:3000";
+      const APP_BASE = "http://localhost:3001";
       const created = result.created ?? 0;
       const updated = result.updated ?? 0;
       const skipped = result.skipped ?? 0;
@@ -2264,32 +2530,38 @@
 
   /** Najde v DOM řádek (kartu) tiketu Fortuna podle týmu a vkladu. */
   function findFortunaCardForTicket(ticket) {
-    const listEl = document.querySelector('[data-test="betslip-history-overview_list"]');
-    if (!listEl) return null;
-    const cards = listEl.querySelectorAll("a.betslip-history-list__item");
-    const wantHeading = (ticket.home_team + " - " + ticket.away_team).trim();
-    const wantStake = ticket.stake;
-    for (let i = 0; i < cards.length; i++) {
-      const row = cards[i].querySelector(".betslip-history-overview-row");
-      if (!row) continue;
-      const headingEl = row.querySelector(".betslip-history-overview-row__heading span");
-      const heading = (headingEl && headingEl.textContent || "").trim();
-      if (heading !== wantHeading) continue;
-      let stake = null;
-      const footer = row.querySelector(".betslip-history-overview-row__footer");
-      if (footer) {
-        footer.querySelectorAll(".betslip-history-overview-row__section").forEach((section) => {
-          const subHeadings = section.querySelectorAll(".betslip-history-overview-row__sub-heading");
-          const labelEl = subHeadings[0];
-          const valueEl = section.querySelector(".betslip-history-overview-row__value");
-          const label = labelEl ? (labelEl.textContent || "").trim() : "";
-          if (label === "Vklad" && valueEl) stake = parseNumber(valueEl.textContent);
-        });
+    try {
+      if (!ticket || typeof ticket !== "object") return null;
+      const listEl = document.querySelector('[data-test="betslip-history-overview_list"]');
+      if (!listEl) return null;
+      const cards = listEl.querySelectorAll("a.betslip-history-list__item");
+      const wantHeading = ((ticket.home_team || "") + " - " + (ticket.away_team || "")).trim();
+      const wantStake = ticket.stake;
+      for (let i = 0; i < cards.length; i++) {
+        const row = cards[i].querySelector(".betslip-history-overview-row");
+        if (!row) continue;
+        const headingEl = row.querySelector(".betslip-history-overview-row__heading span");
+        const heading = (headingEl && headingEl.textContent || "").trim();
+        if (heading !== wantHeading) continue;
+        let stake = null;
+        const footer = row.querySelector(".betslip-history-overview-row__footer");
+        if (footer) {
+          footer.querySelectorAll(".betslip-history-overview-row__section").forEach((section) => {
+            const subHeadings = section.querySelectorAll(".betslip-history-overview-row__sub-heading");
+            const labelEl = subHeadings[0];
+            const valueEl = section.querySelector(".betslip-history-overview-row__value");
+            const label = labelEl ? (labelEl.textContent || "").trim() : "";
+            if (label === "Vklad" && valueEl) stake = parseNumber(valueEl.textContent);
+          });
+        }
+        if (wantStake != null && stake != null && Math.abs(Number(wantStake) - Number(stake)) > 0.01) continue;
+        return cards[i];
       }
-      if (wantStake != null && stake != null && Math.abs(Number(wantStake) - Number(stake)) > 0.01) continue;
-      return cards[i];
+      return null;
+    } catch (e) {
+      console.warn("BetTracker findFortunaCardForTicket – chyba:", e);
+      return null;
     }
-    return null;
   }
 
   /** Pro Fortunu: rozklikne každý tiket v přehledu, z popupu přečte datum výkopu (.betslip-leg-date), zavře a doplní event_start_at. */
@@ -2298,41 +2570,231 @@
     const FORTUNA_AFTER_CLOSE_MS = 600;
     const FORTUNA_MAX_TICKETS = 12;
     const delay = (ms) => new Promise((r) => setTimeout(r, ms));
+    if (!Array.isArray(tickets) || tickets.length === 0) return;
 
     for (let i = 0; i < Math.min(tickets.length, FORTUNA_MAX_TICKETS); i++) {
       const ticket = tickets[i];
-      const card = findFortunaCardForTicket(ticket);
-      if (!card) continue;
+      try {
+        const card = findFortunaCardForTicket(ticket);
+        if (!card) continue;
 
-      card.click();
-      await delay(400);
+        card.click();
+        await delay(400);
 
-      let eventStartIso = null;
-      for (let w = 0; w < 35; w++) {
-        await delay(100);
-        const legDateEls = document.querySelectorAll(".betslip-leg-date span");
-        if (legDateEls.length > 0) {
-          const times = [];
-          legDateEls.forEach((el) => {
-            const text = (el.textContent || "").trim();
-            if (text) {
-              const iso = parseFortunaRelativeDate(text);
-              if (iso) times.push(iso);
+        let eventStartIso = null;
+        let sportIconId = null;
+        for (let w = 0; w < 35; w++) {
+          await delay(100);
+          try {
+            const legDateEls = document.querySelectorAll(".betslip-leg-date span");
+            if (legDateEls.length > 0) {
+              const times = [];
+              legDateEls.forEach((el) => {
+                const text = (el.textContent || "").trim();
+                if (text) {
+                  const iso = parseFortunaRelativeDate(text);
+                  if (iso) times.push(iso);
+                }
+              });
+              if (times.length > 0) {
+                times.sort();
+                eventStartIso = times[0];
+              }
             }
-          });
-          if (times.length > 0) {
-            times.sort();
-            eventStartIso = times[0];
-          }
-          break;
+            const detailRoot = document.querySelector(".betslip-history-detail") || document;
+            const sportImg = detailRoot.querySelector('img[alt*="ufo:sprt:"], img[src*="ufo-sprt-"], img[src*="ifortuna.cz/sports"]');
+            if (sportImg) {
+              if (sportImg.src) {
+                const m = sportImg.src.match(/ufo-sprt-([a-z0-9]+)\.png/i);
+                if (m) sportIconId = m[1];
+              }
+              if (!sportIconId && sportImg.getAttribute("alt")) {
+                const altM = sportImg.getAttribute("alt").match(/ufo:sprt:([a-z0-9]+)\.png/i);
+                if (altM) sportIconId = altM[1];
+              }
+            }
+          } catch (_) { /* ignorovat chyby v jednom průchodu */ }
+          if (eventStartIso || w > 3) break;
         }
+
+        if (eventStartIso) ticket.event_start_at = eventStartIso;
+        else if (ticket.placed_at) ticket.event_start_at = ticket.placed_at;
+        if (sportIconId) ticket.sport_icon_id = sportIconId;
+      } catch (e) {
+        console.warn("BetTracker Fortuna enrich – chyba u tiketu:", ticket && (ticket.home_team || ticket.away_team), e);
+      } finally {
+        try {
+          document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", keyCode: 27, bubbles: true }));
+          await delay(FORTUNA_AFTER_CLOSE_MS);
+        } catch (_) { }
+      }
+    }
+  }
+
+  async function scrollBetanoMyBetsToLoadAll() {
+    const scrollStep = 800;
+    const pauseMs = 400;
+    const maxSteps = 30;
+    let lastCount = 0;
+    let sameCount = 0;
+
+    const scrollables = document.querySelectorAll('#my-bets-section .my-bets__category__body, #my-bets-section [class*="overflow-auto"], aside [class*="overflow-auto"]');
+    if (!scrollables.length) return;
+
+    for (let step = 0; step < maxSteps; step++) {
+      const cards = document.querySelectorAll('#my-bets-section [data-qa="bet-activity-card"], aside [data-qa="bet-activity-card"]');
+      if (cards.length > 0 && cards.length === lastCount) {
+        sameCount++;
+        if (sameCount >= 3) break;
+      } else {
+        sameCount = 0;
+      }
+      lastCount = cards.length;
+
+      scrollables.forEach((el) => {
+        el.scrollTop += scrollStep;
+      });
+      await new Promise((r) => setTimeout(r, pauseMs));
+    }
+  }
+
+  /**
+   * Betano homepage „Moje sázky“ (#my-bets-section): stejný princip jako Fortuna –
+   * pro každou kartu rozklikneme toggle, přečteme event_start_at a is_live, pak jdeme dál.
+   * Vrací tikety kompletní včetně času zápasu a live stavu.
+   */
+  async function scrapeBetanoFromHomepageWithExpand() {
+    const BETANO_EXPAND_WAIT_MS = 450;
+    const BETANO_MAX_CARDS = 50;
+    const delay = (ms) => new Promise((r) => setTimeout(r, ms));
+
+    await scrollBetanoMyBetsToLoadAll();
+
+    const listEl = document.querySelector('#my-bets-section [data-qa="bet-list"]') || document.querySelector('aside [data-qa="bet-list"]');
+    if (!listEl) return [];
+
+    const cards = Array.from(listEl.querySelectorAll('.bet-activity-card[data-qa="bet-activity-card"]'));
+    const results = [];
+
+    for (let i = 0; i < Math.min(cards.length, BETANO_MAX_CARDS); i++) {
+      const card = cards[i];
+      const toggleBtn = card.querySelector('[data-qa="toggle-button"]');
+      if (!toggleBtn) continue;
+
+      const alreadyExpanded = card.querySelector('.bet-event-date-time, [data-qa="bet-event-date-time"]');
+      if (!alreadyExpanded) {
+        toggleBtn.click();
+        await delay(BETANO_EXPAND_WAIT_MS);
       }
 
-      if (eventStartIso) ticket.event_start_at = eventStartIso;
-      else if (ticket.placed_at) ticket.event_start_at = ticket.placed_at;
-      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", keyCode: 27, bubbles: true }));
-      await delay(FORTUNA_AFTER_CLOSE_MS);
+      try {
+        const stakeEl = card.querySelector('[data-qa="bet-label-amount"]');
+        const stake = stakeEl ? parseNumber(stakeEl.textContent) : 0;
+        if (!stake || stake <= 0) continue;
+
+        const oddsEl = card.querySelector('.card-header [data-qa="bet-odds"], [data-qa="bet-odds"]');
+        const odds = oddsEl ? parseNumber(oddsEl.textContent) : null;
+
+        const selectionEl = card.querySelector('[data-qa="selection-label"], .selection-label');
+        const selection_raw = selectionEl ? selectionEl.textContent.trim() : null;
+        const marketEl = card.querySelector('[data-qa="market-label"], .market-label');
+        const market_label_raw = marketEl ? marketEl.textContent.trim() : null;
+        const ticketTypeEl = card.querySelector('[data-qa="bet-label-title"], .bet-label__title');
+        const ticket_type_raw = ticketTypeEl ? ticketTypeEl.textContent.trim() : "SOLO sázka";
+
+        let home_team = "";
+        let away_team = "";
+        const eventNameEl = card.querySelector('.event-name, [data-qa="event-info-link"], .tw-text-licorice, [class*="match"], .participants, .event-info__link');
+        const participantsEl = card.querySelector('.participants');
+        if (participantsEl) {
+          const names = participantsEl.querySelectorAll('.participants__participant-name');
+          if (names.length >= 2) {
+            home_team = (names[0].textContent || "").trim();
+            away_team = (names[1].textContent || "").trim();
+          }
+        } else if (eventNameEl) {
+          const text = (eventNameEl.textContent || "").replace(/\s+/g, " ").trim();
+          const parts = text.split(" - ");
+          if (parts.length >= 2) {
+            home_team = (parts[0] || "").trim();
+            away_team = (parts[1] || "").trim();
+          } else {
+            home_team = text;
+            away_team = "?";
+          }
+        }
+
+        if (!home_team && !away_team) {
+          if (market_label_raw || selection_raw) {
+            home_team = market_label_raw || "Speciální sázka / Outright";
+            away_team = selection_raw || "?";
+          } else {
+            console.log("BetTracker: Dropped card missing teams:", card.innerText);
+            continue;
+          }
+        }
+
+        const timeEl = card.querySelector('.bet-event-date-time, [data-qa="bet-event-date-time"]');
+        let event_start_at = null;
+        if (timeEl) {
+          const rawTime = (timeEl.textContent || "").trim();
+          if (rawTime) event_start_at = parseBetanoRelativeTime(rawTime);
+        }
+
+        let is_live = !!card.querySelector('.leg-scoreboard-container, [data-qa="leg-scoreboard-container"], [data-qa="thunder-icon"]');
+        if (!is_live) {
+          const cardText = (card.textContent || "").trim();
+          if (/\blive\b/i.test(cardText) || /\bživě\b/i.test(cardText)) is_live = true;
+        }
+        if (!is_live) {
+          const liveEl = card.querySelector('[data-qa*="live" i]');
+          if (liveEl && (liveEl.textContent || "").trim().toLowerCase() === "live") is_live = true;
+        }
+
+        const betano_key = (home_team + "|" + away_team + "|" + stake + "|" + (odds || "")).trim() || String(i);
+
+        // sport – z ikony v kartě (BASK, ICEH, FOOT, HAND, TENN, ESPS)
+        let sport_label = null;
+        let sport_icon_id = null;
+        const sportImg = card.querySelector('img[alt="sport-icon"]');
+        if (sportImg) {
+          const src = sportImg.getAttribute("src") || "";
+          sport_icon_id = src;
+          if (src.includes("BASK")) sport_label = "Basketbal";
+          else if (src.includes("ICEH")) sport_label = "Hokej";
+          else if (src.includes("FOOT")) sport_label = "Fotbal";
+          else if (src.includes("HAND")) sport_label = "Házená";
+          else if (src.includes("TENN")) sport_label = "Tenis";
+          else if (src.includes("ESPS")) sport_label = "Esport";
+        }
+
+        results.push({
+          home_team,
+          away_team,
+          betano_key,
+          sport_label: sport_label || null,
+          sport_icon_id: sport_icon_id || null,
+          market_label_raw,
+          selection_raw,
+          ticket_type_raw,
+          status_raw: "open",
+          stake,
+          payout: null,
+          odds: odds || 1,
+          placed_at: event_start_at || null,
+          event_start_at: event_start_at || undefined,
+          is_live
+        });
+      } catch (e) {
+        console.warn("BetTracker Betano homepage – chyba u karty:", e);
+      }
+
+      if (!alreadyExpanded && toggleBtn) {
+        toggleBtn.click();
+        await delay(200);
+      }
     }
+    return results;
   }
 
   /** Pro Betano: doplní event_start_at (čas výkopu) ze sidebaru „Moje sázky“ nebo z karty; fallback placed_at. */
@@ -2383,16 +2845,32 @@
       all = scrapeTipsportTicketsFromPage();
     } else if (isBetanoPage()) {
       source = "betano";
-      all = scrapeBetanoTicketsFromPage();
-    } else if (isFortunaPage()) {
-      const hasOverview = document.querySelector('[data-test="betslip-history-overview_list"]');
-      const hasDetail = document.querySelector(".betslip-history-detail__left-panel");
-      if (hasDetail && !hasOverview) {
-        all = scrapeFortunaDetailTicket();
+      const hasHomepageMyBets = document.querySelector('#my-bets-section [data-qa="bet-list"]');
+      if (hasHomepageMyBets) {
+        all = await scrapeBetanoFromHomepageWithExpand();
       } else {
-        all = scrapeFortunaTicketsFromPage();
+        if (isBetanoBethistoryPage()) {
+          await ensureBetanoOpenFilter();
+          await scrollBetanoTicketList();
+        }
+        await expandBetanoCardsBeforeScrape();
+        all = scrapeBetanoTicketsFromPage();
+        enrichBetanoTicketsWithSidebarEventTime(all);
       }
-      source = "fortuna";
+    } else if (isFortunaPage()) {
+      try {
+        const hasOverview = document.querySelector('[data-test="betslip-history-overview_list"]');
+        const hasDetail = document.querySelector(".betslip-history-detail__left-panel");
+        if (hasDetail && !hasOverview) {
+          all = scrapeFortunaDetailTicket();
+        } else {
+          all = scrapeFortunaTicketsFromPage();
+        }
+        source = "fortuna";
+      } catch (e) {
+        console.warn("BetTracker Fortuna – chyba při načítání tiketů:", e);
+        all = [];
+      }
     }
     if (!source || !all.length) {
       alert("BetTracker: Na stránce nebyly nalezeny žádné tikety, nebo stránka není podporovaná pro LIVE. Otevřete přehled tiketů (Tipsport Moje tikety, Betano, Fortuna).");
@@ -2413,6 +2891,8 @@
       alert("BetTracker – LIVE: Na stránce nebyly nalezeny žádné tikety k synchronizaci (otevřené, nevyhodnocené ani live).\n\nUjistěte se, že jste na přehledu „Moje tikety“ a že stránka zobrazuje seznam tiketů.");
       return;
     }
+    const liveCount = openOnly.filter(function (t) { return t.is_live === true; }).length;
+    console.log("BetTracker OVERLAY sync (" + source + "): " + openOnly.length + " tiketů, z toho is_live=true: " + liveCount + (liveCount === 0 && source === "betano" ? " – pokud máte live zápasy, rozbalte karty a zkuste znovu." : ""));
     if (source === "tipsport") {
       await enrichTipsportTicketsWithKickoff(openOnly);
     }
@@ -2420,14 +2900,18 @@
       enrichBetanoTicketsWithSidebarEventTime(openOnly);
     }
     if (source === "fortuna") {
-      await enrichFortunaTicketsWithDetailDate(openOnly);
+      try {
+        await enrichFortunaTicketsWithDetailDate(openOnly);
+      } catch (e) {
+        console.warn("BetTracker Fortuna – obohacení o datum zápasu selhalo, pokračuji bez něj:", e);
+      }
     }
     try {
-      const result = await sendToApi(openOnly, source, false);
+      const result = await sendToApi(openOnly, source, false, true);
       const created = result.created ?? 0;
       const updated = result.updated ?? 0;
       const errors = result.errors ?? 0;
-      const APP_BASE = "http://localhost:3000";
+      const APP_BASE = "http://localhost:3001";
       if (errors > 0) {
         alert("BetTracker – LIVE sync: " + created + " nových, " + updated + " aktualizováno, " + errors + " chyb.");
       } else {
@@ -2436,7 +2920,14 @@
       window.open(APP_BASE + "/live", "_blank");
     } catch (e) {
       console.error("BetTracker LIVE sync – chyba:", e);
-      alert("BetTracker – LIVE sync selhal: " + e.message);
+      const msg = (e && e.message) ? e.message : String(e);
+      let hint = "";
+      if (/failed to fetch|networkerror|load failed|connection refused|není dostupný|fallback API selhal/i.test(msg)) {
+        hint = "\n\n• Spusťte backend na portu 15555 (např. BetTracker.bat nebo: uvicorn app.main:app --port 15555).\n• V Nastavení rozšíření (pravý klik na ikonu → Možnosti) zkuste URL: http://localhost:15555/api";
+      } else if (/kontext|context invalidated|message port closed/i.test(msg)) {
+        hint = "\n\nObnovte stránku (F5) a zkuste znovu. Pokud problém trvá, spusťte backend na portu 15555.";
+      }
+      alert("BetTracker – LIVE sync selhal: " + msg + hint);
     }
   }
 
@@ -2505,12 +2996,11 @@
 
   function init() {
     chrome.storage.sync.get(["upcomingButtonVisibility"], function (result) {
-      const upcomingVisibility = result.upcomingButtonVisibility || "everywhere";
       const isTipsport = isTipsportPage();
       const isBetano = isBetanoPage();
       const isFortuna = isFortunaPage();
-      const showUpcoming = isTipsport || isBetano || isFortuna || upcomingVisibility === "everywhere";
 
+      // SOON (Upcoming) tlačítko zatím skryto – vždy zobrazit jen Import a Live
       var upcomingBtnEl = document.getElementById("bettracker-upcoming-btn");
       if (upcomingBtnEl) {
         upcomingBtnEl.remove();
@@ -2525,13 +3015,6 @@
           const activeBtn = createImportActiveButton();
           activeBtn.addEventListener("click", handleImportActiveClick);
         }
-      }
-      if (showUpcoming) {
-        const upcomingBtn = createUpcomingButton();
-        upcomingBtn.addEventListener("click", function () {
-          const panel = document.getElementById("bettracker-upcoming-panel");
-          if (panel) removeUpcomingPanel(); else showUpcomingPanel();
-        });
       }
       if (isTipsportTicketDetail()) runTicketDetailLiveLink();
       if (isTipsportLiveZapas()) runLiveZapasScrape();

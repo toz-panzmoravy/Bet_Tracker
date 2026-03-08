@@ -71,18 +71,16 @@ export default function NastaveniPage() {
   }
 
   return (
-    <div style={{ maxWidth: 700 }}>
-      <div style={{ marginBottom: "1.5rem" }}>
-        <h1 style={{ fontSize: "1.5rem", fontWeight: 700 }}>⚙️ Nastavení</h1>
-        <p style={{ fontSize: "0.85rem", color: "var(--color-text-secondary)" }}>
-          Konfigurace aplikace, bankrollu a LLM
-        </p>
-      </div>
+    <div className="content-width" style={{ maxWidth: 720 }}>
+      <header className="page-header">
+        <h1 className="page-title">⚙️ Nastavení</h1>
+        <p className="page-subtitle">Konfigurace aplikace, bankrollu a LLM</p>
+      </header>
 
       {/* Bankroll */}
       <div className="glass-card" style={{ padding: "1.25rem", marginBottom: 16 }}>
         <h2 style={{ fontSize: "0.95rem", fontWeight: 600, marginBottom: 8 }}>💼 Bankroll</h2>
-        <p style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: 12 }}>
+        <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: 12 }}>
           Bankroll je částka, se kterou jsi aktuálně ochotný aktivně sázet. Tuto hodnotu můžeš
           kdykoliv ručně změnit – metriky na dashboardu (např. zhodnocení bankrollu) se přepočítají podle aktuální hodnoty.
         </p>
@@ -117,7 +115,7 @@ export default function NastaveniPage() {
       {/* Notifikace / Webhook */}
       <div className="glass-card" style={{ padding: "1.25rem", marginBottom: 16 }}>
         <h2 style={{ fontSize: "0.95rem", fontWeight: 600, marginBottom: 8 }}>🔔 Notifikace</h2>
-        <p style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: 12 }}>
+        <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: 12 }}>
           Při změně stavu live tiketu (např. zápas skončil) backend odešle POST na tuto URL s JSON tělem (event, ticket_id, message, bookmaker, score, result). Můžeš použít např. Telegram Bot API nebo vlastní webhook.
         </p>
         <form
@@ -160,9 +158,9 @@ export default function NastaveniPage() {
       </div>
 
       {/* Ollama – upozornění */}
-      <div className="glass-card" style={{ padding: "1rem 1.25rem", marginBottom: 16, borderLeft: "4px solid var(--color-accent)" }}>
-        <p style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", margin: 0 }}>
-          <strong>Ollama a modely:</strong> Backend používá konfiguraci z <code style={{ background: "var(--color-bg-input)", padding: "2px 6px", borderRadius: 4 }}>.env</code> (OLLAMA_URL, OLLAMA_VISION_MODEL, OLLAMA_TEXT_MODEL). Změny zde v prohlížeči se neukládají na server.
+      <div className="glass-card" style={{ padding: "1rem 1.25rem", marginBottom: 16, borderLeft: "4px solid var(--accent)" }}>
+        <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)", margin: 0 }}>
+          <strong>Ollama a modely:</strong> Backend používá konfiguraci z <code style={{ background: "var(--bg-input)", padding: "2px 6px", borderRadius: 4 }}>.env</code> (OLLAMA_URL, OLLAMA_VISION_MODEL, OLLAMA_TEXT_MODEL). Změny zde v prohlížeči se neukládají na server.
         </p>
       </div>
 
@@ -177,10 +175,10 @@ export default function NastaveniPage() {
               borderRadius: "50%",
               background:
                 ollamaStatus === "connected"
-                  ? "var(--color-green)"
+                  ? "var(--success)"
                   : ollamaStatus === "error"
-                  ? "var(--color-red)"
-                  : "var(--color-yellow)",
+                  ? "var(--danger)"
+                  : "var(--warning)",
             }}
           />
           <span style={{ fontSize: "0.875rem" }}>
@@ -221,7 +219,7 @@ export default function NastaveniPage() {
         <div
           style={{
             fontSize: "0.85rem",
-            color: "var(--color-text-secondary)",
+            color: "var(--text-secondary)",
             lineHeight: 1.8,
           }}
         >
@@ -230,7 +228,7 @@ export default function NastaveniPage() {
           </p>
           <div
             style={{
-              background: "var(--color-bg-input)",
+              background: "var(--bg-input)",
               padding: "8px 12px",
               borderRadius: 8,
               fontFamily: "monospace",
@@ -247,7 +245,7 @@ export default function NastaveniPage() {
           </p>
           <div
             style={{
-              background: "var(--color-bg-input)",
+              background: "var(--bg-input)",
               padding: "8px 12px",
               borderRadius: 8,
               fontFamily: "monospace",

@@ -13,6 +13,7 @@ import {
   ResponsiveContainer,
   Cell,
   LabelList,
+  ReferenceLine,
 } from "recharts";
 import { getAnalyticsSummary, getBookmakers } from "../lib/api";
 import { useToast } from "../components/Toast";
@@ -40,9 +41,9 @@ function ChartCard({ title, subtitle, children }) {
   return (
     <div className="glass-card" style={{ padding: "1.25rem" }}>
       <div style={{ marginBottom: 16 }}>
-        <h3 style={{ fontSize: "0.9rem", fontWeight: 600 }}>{title}</h3>
+        <h3 className="card-title">{title}</h3>
         {subtitle && (
-          <p style={{ fontSize: "0.7rem", color: "var(--color-text-muted)", marginTop: 2 }}>
+          <p className="section-subtitle" style={{ marginTop: 2, fontSize: "0.7rem" }}>
             {subtitle}
           </p>
         )}
@@ -54,7 +55,7 @@ function ChartCard({ title, subtitle, children }) {
 
 function EmptyState() {
   return (
-    <div style={{ textAlign: "center", padding: "3rem 0", color: "var(--color-text-muted)" }}>
+    <div style={{ textAlign: "center", padding: "3rem 0", color: "var(--text-muted)" }}>
       <p style={{ fontSize: "2.5rem", marginBottom: 8, opacity: 0.4 }}>📊</p>
       <p style={{ fontSize: "0.85rem" }}>Žádná data k zobrazení</p>
       <p style={{ fontSize: "0.7rem", marginTop: 4 }}>Změň filtry nebo přidej tikety přes Import</p>
@@ -68,7 +69,7 @@ function BarLabel({ x, y, width, value }) {
     <text
       x={x + width / 2}
       y={value >= 0 ? y - 8 : y + 20}
-      fill={value >= 0 ? "#22c55e" : "#ef4444"}
+      fill={value >= 0 ? "var(--success)" : "var(--danger)"}
       textAnchor="middle"
       fontSize={11}
       fontWeight={600}
@@ -86,34 +87,34 @@ function ProfitBarTooltip({ active, payload, label }) {
   return (
     <div
       style={{
-        background: "rgba(22, 24, 34, 0.95)",
-        border: "1px solid rgba(99, 102, 241, 0.25)",
+        background: "var(--bg-card)",
+        border: "1px solid var(--border)",
         borderRadius: 12,
         padding: "12px 16px",
         fontSize: "0.8rem",
         minWidth: 180,
       }}
     >
-      <p style={{ color: "#e4e6f0", fontWeight: 700, marginBottom: 8 }}>{d.sport_name}</p>
+      <p style={{ color: "var(--text-primary)", fontWeight: 700, marginBottom: 8 }}>{d.sport_name}</p>
       <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "4px 16px" }}>
-        <span style={{ color: "#8b8fa3" }}>Profit</span>
+        <span style={{ color: "var(--text-muted)" }}>Profit</span>
         <span
           style={{
-            color: Number(d.profit) >= 0 ? "#22c55e" : "#ef4444",
+            color: Number(d.profit) >= 0 ? "var(--success)" : "var(--danger)",
             fontWeight: 600,
           }}
         >
           {Number(d.profit) >= 0 ? "+" : ""}
           {Number(d.profit).toLocaleString("cs-CZ")} Kč
         </span>
-        <span style={{ color: "#8b8fa3" }}>Sázek</span>
-        <span style={{ color: "#e4e6f0", fontWeight: 600 }}>{d.tickets_count}</span>
-        <span style={{ color: "#8b8fa3" }}>Hitrate</span>
-        <span style={{ color: "#e4e6f0", fontWeight: 600 }}>{d.hitrate_percent}%</span>
-        <span style={{ color: "#8b8fa3" }}>ROI</span>
+        <span style={{ color: "var(--text-muted)" }}>Sázek</span>
+        <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>{d.tickets_count}</span>
+        <span style={{ color: "var(--text-muted)" }}>Hitrate</span>
+        <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>{d.hitrate_percent}%</span>
+        <span style={{ color: "var(--text-muted)" }}>ROI</span>
         <span
           style={{
-            color: d.roi_percent >= 0 ? "#22c55e" : "#ef4444",
+            color: d.roi_percent >= 0 ? "var(--success)" : "var(--danger)",
             fontWeight: 600,
           }}
         >
@@ -131,34 +132,34 @@ function DayOfWeekTooltip({ active, payload }) {
   return (
     <div
       style={{
-        background: "rgba(22, 24, 34, 0.95)",
-        border: "1px solid rgba(99, 102, 241, 0.25)",
+        background: "var(--bg-card)",
+        border: "1px solid var(--border)",
         borderRadius: 12,
         padding: "12px 16px",
         fontSize: "0.8rem",
         minWidth: 180,
       }}
     >
-      <p style={{ color: "#e4e6f0", fontWeight: 700, marginBottom: 8 }}>{d.day_name}</p>
+      <p style={{ color: "var(--text-primary)", fontWeight: 700, marginBottom: 8 }}>{d.day_name}</p>
       <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "4px 16px" }}>
-        <span style={{ color: "#8b8fa3" }}>Profit</span>
+        <span style={{ color: "var(--text-muted)" }}>Profit</span>
         <span
           style={{
-            color: Number(d.profit) >= 0 ? "#22c55e" : "#ef4444",
+            color: Number(d.profit) >= 0 ? "var(--success)" : "var(--danger)",
             fontWeight: 600,
           }}
         >
           {Number(d.profit) >= 0 ? "+" : ""}
           {Number(d.profit).toLocaleString("cs-CZ")} Kč
         </span>
-        <span style={{ color: "#8b8fa3" }}>Sázek</span>
-        <span style={{ color: "#e4e6f0", fontWeight: 600 }}>{d.tickets_count}</span>
-        <span style={{ color: "#8b8fa3" }}>Hitrate</span>
-        <span style={{ color: "#e4e6f0", fontWeight: 600 }}>{d.hitrate_percent}%</span>
-        <span style={{ color: "#8b8fa3" }}>ROI</span>
+        <span style={{ color: "var(--text-muted)" }}>Sázek</span>
+        <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>{d.tickets_count}</span>
+        <span style={{ color: "var(--text-muted)" }}>Hitrate</span>
+        <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>{d.hitrate_percent}%</span>
+        <span style={{ color: "var(--text-muted)" }}>ROI</span>
         <span
           style={{
-            color: d.roi_percent >= 0 ? "#22c55e" : "#ef4444",
+            color: d.roi_percent >= 0 ? "var(--success)" : "var(--danger)",
             fontWeight: 600,
           }}
         >
@@ -176,24 +177,24 @@ function HitrateBarTooltip({ active, payload }) {
   return (
     <div
       style={{
-        background: "rgba(22, 24, 34, 0.95)",
-        border: "1px solid rgba(99, 102, 241, 0.25)",
+        background: "var(--bg-card)",
+        border: "1px solid var(--border)",
         borderRadius: 12,
         padding: "12px 16px",
         fontSize: "0.8rem",
         minWidth: 180,
       }}
     >
-      <p style={{ color: "#e4e6f0", fontWeight: 700, marginBottom: 8 }}>{d.market_type_name}</p>
+      <p style={{ color: "var(--text-primary)", fontWeight: 700, marginBottom: 8 }}>{d.market_type_name}</p>
       <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "4px 16px" }}>
-        <span style={{ color: "#8b8fa3" }}>Hitrate</span>
-        <span style={{ color: "#e4e6f0", fontWeight: 600 }}>{d.hitrate_percent}%</span>
-        <span style={{ color: "#8b8fa3" }}>Sázek</span>
-        <span style={{ color: "#e4e6f0", fontWeight: 600 }}>{d.tickets_count}</span>
-        <span style={{ color: "#8b8fa3" }}>Profit</span>
+        <span style={{ color: "var(--text-muted)" }}>Hitrate</span>
+        <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>{d.hitrate_percent}%</span>
+        <span style={{ color: "var(--text-muted)" }}>Sázek</span>
+        <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>{d.tickets_count}</span>
+        <span style={{ color: "var(--text-muted)" }}>Profit</span>
         <span
           style={{
-            color: Number(d.profit) >= 0 ? "#22c55e" : "#ef4444",
+            color: Number(d.profit) >= 0 ? "var(--success)" : "var(--danger)",
             fontWeight: 600,
           }}
         >
@@ -212,32 +213,55 @@ function TrendTooltip({ active, payload }) {
   return (
     <div
       style={{
-        background: "rgba(22, 24, 34, 0.95)",
-        border: "1px solid rgba(99, 102, 241, 0.25)",
+        background: "var(--bg-card)",
+        border: "1px solid var(--border)",
         borderRadius: 12,
         padding: "12px 16px",
         fontSize: "0.8rem",
         minWidth: 160,
       }}
     >
-      <p style={{ color: "#e4e6f0", fontWeight: 700, marginBottom: 8 }}>{d.date}</p>
+      <p style={{ color: "var(--text-primary)", fontWeight: 700, marginBottom: 8 }}>{d.date}</p>
       <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "4px 16px" }}>
-        <span style={{ color: "#8b8fa3" }}>Profit</span>
+        <span style={{ color: "var(--text-muted)" }}>Profit</span>
         <span
           style={{
-            color: Number(d.profit) >= 0 ? "#22c55e" : "#ef4444",
+            color: Number(d.profit) >= 0 ? "var(--success)" : "var(--danger)",
             fontWeight: 600,
           }}
         >
           {Number(d.profit) >= 0 ? "+" : ""}
           {Number(d.profit).toLocaleString("cs-CZ")} Kč
         </span>
-        <span style={{ color: "#8b8fa3" }}>Kumulativní</span>
-        <span style={{ color: "#e4e6f0", fontWeight: 600 }}>
+        <span style={{ color: "var(--text-muted)" }}>Kumulativní</span>
+        <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>
           {Number(d.cumulative_profit).toLocaleString("cs-CZ")} Kč
         </span>
-        <span style={{ color: "#8b8fa3" }}>Sázek</span>
-        <span style={{ color: "#e4e6f0", fontWeight: 600 }}>{d.bets_count}</span>
+        <span style={{ color: "var(--text-muted)" }}>Sázek</span>
+        <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>{d.bets_count}</span>
+      </div>
+    </div>
+  );
+}
+
+function WeeklyTooltip({ active, payload }) {
+  if (!active || !payload?.length) return null;
+  const d = payload[0]?.payload;
+  if (!d) return null;
+  return (
+    <div className="chart-tooltip" style={{ minWidth: 180 }}>
+      <p style={{ color: "var(--text-primary)", fontWeight: 700, marginBottom: 8 }}>Týden {d.week_label}</p>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "4px 16px" }}>
+        <span style={{ color: "var(--text-muted)" }}>Profit</span>
+        <span style={{ color: Number(d.profit) >= 0 ? "var(--success)" : "var(--danger)", fontWeight: 600 }}>
+          {Number(d.profit) >= 0 ? "+" : ""}{Number(d.profit).toLocaleString("cs-CZ")} Kč
+        </span>
+        <span style={{ color: "var(--text-muted)" }}>ROI</span>
+        <span style={{ color: d.roi_percent >= 0 ? "var(--success)" : "var(--danger)", fontWeight: 600 }}>{d.roi_percent}%</span>
+        <span style={{ color: "var(--text-muted)" }}>Hitrate</span>
+        <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>{d.hitrate_percent}%</span>
+        <span style={{ color: "var(--text-muted)" }}>Sázek</span>
+        <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>{d.bets_count}</span>
       </div>
     </div>
   );
@@ -385,6 +409,31 @@ export default function AnalyticsPage() {
     }));
   }, [data?.by_day_of_week]);
 
+  const weeklyChartData = useMemo(() => {
+    if (!data?.weekly_trend?.length) return [];
+    return data.weekly_trend.map((w) => ({
+      week_label: w.week_label,
+      profit: Number(w.profit),
+      roi_percent: w.roi_percent,
+      hitrate_percent: w.hitrate_percent,
+      bets_count: w.bets_count,
+    }));
+  }, [data?.weekly_trend]);
+
+  const weeklyInsight = useMemo(() => {
+    const w = weeklyChartData;
+    if (w.length < 4) return null;
+    const recent = w.slice(-2);
+    const previous = w.slice(-4, -2);
+    const recentProfit = recent.reduce((s, x) => s + x.profit, 0);
+    const previousProfit = previous.reduce((s, x) => s + x.profit, 0);
+    const recentRoi = recent.length ? recent.reduce((s, x) => s + x.roi_percent, 0) / recent.length : 0;
+    const previousRoi = previous.length ? previous.reduce((s, x) => s + x.roi_percent, 0) / previous.length : 0;
+    if (recentProfit > previousProfit && recentRoi >= previousRoi - 5) return { type: "better", text: "Poslední 2 týdny: zlepšuješ se oproti předchozím." };
+    if (recentProfit < previousProfit && recentRoi < previousRoi - 5) return { type: "worse", text: "Poslední 2 týdny: zhoršuješ se oproti předchozím." };
+    return { type: "stable", text: "Výkon v posledních týdnech je stabilní." };
+  }, [weeklyChartData]);
+
   const worstCombos = useMemo(() => {
     if (!data?.by_market?.length) return [];
     return [...data.by_market]
@@ -402,10 +451,11 @@ export default function AnalyticsPage() {
   }, [data?.by_market]);
 
   return (
-    <div style={{ maxWidth: 1200, margin: "0 auto" }}>
-      <h1 style={{ fontSize: "1.5rem", fontWeight: 700, marginBottom: "1.5rem" }}>
-        📈 Analytics
-      </h1>
+    <div className="content-width">
+      <header className="page-header">
+        <h1 className="page-title">📈 Analytics</h1>
+        <p className="page-subtitle">Vývoj po týdnech, podle sportu a typu sázky – uvidíš, kde se zlepšuješ a kde ztrácíš</p>
+      </header>
 
       {/* Filtry */}
       <div
@@ -420,7 +470,7 @@ export default function AnalyticsPage() {
         }}
       >
         <div>
-          <label style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", display: "block", marginBottom: 4 }}>
+          <label style={{ fontSize: "0.75rem", color: "var(--text-muted)", display: "block", marginBottom: 4 }}>
             Období
           </label>
           <div style={{ display: "flex", gap: 6 }}>
@@ -432,9 +482,9 @@ export default function AnalyticsPage() {
                 style={{
                   padding: "6px 12px",
                   borderRadius: 8,
-                  border: "1px solid var(--color-border)",
-                  background: presetIndex === i ? "var(--color-accent-soft)" : "var(--color-bg-input)",
-                  color: "var(--color-text-primary)",
+                  border: "1px solid var(--border)",
+                  background: presetIndex === i ? "var(--accent-soft)" : "var(--bg-input)",
+                  color: "var(--text-primary)",
                   fontSize: "0.8rem",
                   cursor: "pointer",
                 }}
@@ -451,9 +501,9 @@ export default function AnalyticsPage() {
               style={{
                 padding: "6px 10px",
                 borderRadius: 8,
-                border: "1px solid var(--color-border)",
-                background: "var(--color-bg-input)",
-                color: "var(--color-text-primary)",
+                border: "1px solid var(--border)",
+                background: "var(--bg-input)",
+                color: "var(--text-primary)",
                 fontSize: "0.8rem",
               }}
             />
@@ -464,16 +514,16 @@ export default function AnalyticsPage() {
               style={{
                 padding: "6px 10px",
                 borderRadius: 8,
-                border: "1px solid var(--color-border)",
-                background: "var(--color-bg-input)",
-                color: "var(--color-text-primary)",
+                border: "1px solid var(--border)",
+                background: "var(--bg-input)",
+                color: "var(--text-primary)",
                 fontSize: "0.8rem",
               }}
             />
           </div>
         </div>
         <div>
-          <label style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", display: "block", marginBottom: 4 }}>
+          <label style={{ fontSize: "0.75rem", color: "var(--text-muted)", display: "block", marginBottom: 4 }}>
             Sázkovka
           </label>
           <select
@@ -482,9 +532,9 @@ export default function AnalyticsPage() {
             style={{
               padding: "8px 12px",
               borderRadius: 8,
-              border: "1px solid var(--color-border)",
-              background: "var(--color-bg-input)",
-              color: "var(--color-text-primary)",
+              border: "1px solid var(--border)",
+              background: "var(--bg-input)",
+              color: "var(--text-primary)",
               fontSize: "0.85rem",
               minWidth: 140,
             }}
@@ -503,17 +553,17 @@ export default function AnalyticsPage() {
             checked={jenVyhodnocene}
             onChange={(e) => setJenVyhodnocene(e.target.checked)}
           />
-          <span style={{ fontSize: "0.85rem", color: "var(--color-text-primary)" }}>
+          <span style={{ fontSize: "0.85rem", color: "var(--text-primary)" }}>
             Jen vyhodnocené tikety
           </span>
         </label>
-        <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
-          V grafech: <span style={{ color: "#22c55e" }}>■</span> zisk &nbsp; <span style={{ color: "#ef4444" }}>■</span> ztráta
+        <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+          V grafech: <span style={{ color: "var(--success)" }}>■</span> zisk &nbsp; <span style={{ color: "var(--danger)" }}>■</span> ztráta
         </span>
       </div>
 
       {loading ? (
-        <div style={{ textAlign: "center", padding: "3rem", color: "var(--color-text-muted)" }}>
+        <div style={{ textAlign: "center", padding: "3rem", color: "var(--text-muted)" }}>
           Načítám…
         </div>
       ) : !data ? (
@@ -530,14 +580,14 @@ export default function AnalyticsPage() {
             }}
           >
             <div className="glass-card kpi-card" style={{ padding: "1.25rem 1.5rem" }}>
-              <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", marginBottom: 4 }}>
+              <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: 4 }}>
                 Celkový profit
               </div>
               <div
                 style={{
                   fontSize: "1.25rem",
                   fontWeight: 700,
-                  color: Number(data.kpis?.profit_total) >= 0 ? "var(--color-green)" : "var(--color-red)",
+                  color: Number(data.kpis?.profit_total) >= 0 ? "var(--success)" : "var(--danger)",
                 }}
               >
                 {Number(data.kpis?.profit_total ?? 0) >= 0 ? "+" : ""}
@@ -545,21 +595,21 @@ export default function AnalyticsPage() {
               </div>
             </div>
             <div className="glass-card kpi-card" style={{ padding: "1.25rem 1.5rem" }}>
-              <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", marginBottom: 4 }}>
+              <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: 4 }}>
                 ROI
               </div>
               <div
                 style={{
                   fontSize: "1.25rem",
                   fontWeight: 700,
-                  color: (data.kpis?.roi_percent ?? 0) >= 0 ? "var(--color-green)" : "var(--color-red)",
+                  color: (data.kpis?.roi_percent ?? 0) >= 0 ? "var(--success)" : "var(--danger)",
                 }}
               >
                 {(data.kpis?.roi_percent ?? 0)}%
               </div>
             </div>
             <div className="glass-card kpi-card" style={{ padding: "1.25rem 1.5rem" }}>
-              <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", marginBottom: 4 }}>
+              <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: 4 }}>
                 Hitrate
               </div>
               <div style={{ fontSize: "1.25rem", fontWeight: 700 }}>
@@ -567,7 +617,7 @@ export default function AnalyticsPage() {
               </div>
             </div>
             <div className="glass-card kpi-card" style={{ padding: "1.25rem 1.5rem" }}>
-              <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", marginBottom: 4 }}>
+              <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: 4 }}>
                 Počet tiketů
               </div>
               <div style={{ fontSize: "1.25rem", fontWeight: 700 }}>
@@ -576,35 +626,96 @@ export default function AnalyticsPage() {
             </div>
           </div>
 
-          {/* Graf: Profit podle sportu */}
+          {/* Vývoj po týdnech – vidět zlepšení/zhoršení */}
           <div style={{ marginBottom: "1.5rem" }}>
             <ChartCard
-              title="Profit podle sportu"
-              subtitle="Kladný = zisk, záporný = ztráta za zvolené období"
+              title="Vývoj po týdnech"
+              subtitle="Profit za každý týden – sleduj, jestli se zlepšuješ nebo zhoršuješ"
+            >
+              {weeklyChartData.length ? (
+                <>
+                  {weeklyInsight && (
+                    <p
+                      style={{
+                        fontSize: "0.8rem",
+                        marginBottom: 12,
+                        padding: "8px 12px",
+                        borderRadius: 10,
+                        background: weeklyInsight.type === "better" ? "var(--success-soft)" : weeklyInsight.type === "worse" ? "var(--danger-soft)" : "var(--surface-subtle)",
+                        color: weeklyInsight.type === "better" ? "var(--success)" : weeklyInsight.type === "worse" ? "var(--danger)" : "var(--text-secondary)",
+                        fontWeight: 600,
+                      }}
+                    >
+                      {weeklyInsight.type === "better" && "📈 "}
+                      {weeklyInsight.type === "worse" && "📉 "}
+                      {weeklyInsight.text}
+                    </p>
+                  )}
+                  <ResponsiveContainer width="100%" height={280}>
+                    <BarChart data={weeklyChartData} margin={{ top: 20, right: 10, left: 0, bottom: 5 }} barCategoryGap={8}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                      <ReferenceLine y={0} stroke="var(--text-muted)" strokeWidth={1} strokeDasharray="4 4" />
+                      <XAxis
+                        dataKey="week_label"
+                        tick={{ fill: "var(--text-secondary)", fontSize: 11 }}
+                        axisLine={{ stroke: "var(--border)" }}
+                        tickLine={false}
+                      />
+                      <YAxis
+                        tick={{ fill: "var(--text-secondary)", fontSize: 12 }}
+                        axisLine={false}
+                        tickLine={false}
+                        tickFormatter={(v) => `${Number(v).toLocaleString("cs-CZ")}`}
+                      />
+                      <Tooltip content={<WeeklyTooltip />} cursor={{ fill: "var(--accent-soft)" }} />
+                      <Bar dataKey="profit" name="Profit (Kč)" radius={[6, 6, 0, 0]} maxBarSize={40}>
+                        <LabelList content={<BarLabel />} />
+                        {weeklyChartData.map((entry, i) => (
+                          <Cell
+                            key={i}
+                            fill={entry.profit >= 0 ? "var(--success)" : "var(--danger)"}
+                            fillOpacity={0.9}
+                          />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </>
+              ) : (
+                <EmptyState />
+              )}
+            </ChartCard>
+          </div>
+
+          {/* Profit podle sportu */}
+          <div style={{ marginBottom: "1.5rem" }}>
+            <ChartCard
+              title="Podle sportu"
+              subtitle={bySportChartData.length ? `Nejlepší: ${bySportChartData[0]?.sport_name ?? "—"} • Nejhorší: ${bySportChartData.length ? bySportChartData[bySportChartData.length - 1]?.sport_name : "—"}` : "Kladný = zisk, záporný = ztráta za zvolené období"}
             >
               {bySportChartData.length ? (
                 <ResponsiveContainer width="100%" height={280}>
                   <BarChart data={bySportChartData} margin={{ top: 20, right: 10, left: 0, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(42, 45, 62, 0.5)" vertical={false} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                     <XAxis
                       dataKey="sport_name"
-                      tick={{ fill: "#8b8fa3", fontSize: 11 }}
-                      axisLine={{ stroke: "rgba(42, 45, 62, 0.5)" }}
+                      tick={{ fill: "var(--text-secondary)", fontSize: 12 }}
+                      axisLine={{ stroke: "var(--border)" }}
                       tickLine={false}
                     />
                     <YAxis
-                      tick={{ fill: "#5c6078", fontSize: 10 }}
+                      tick={{ fill: "var(--text-secondary)", fontSize: 12 }}
                       axisLine={false}
                       tickLine={false}
                       tickFormatter={(v) => `${Number(v).toLocaleString("cs-CZ")}`}
                     />
-                    <Tooltip content={<ProfitBarTooltip />} cursor={{ fill: "rgba(99, 102, 241, 0.06)" }} />
+                    <Tooltip content={<ProfitBarTooltip />} cursor={{ fill: "var(--accent-soft)" }} />
                     <Bar dataKey="profit" name="Profit (Kč)" radius={[8, 8, 0, 0]} maxBarSize={50}>
                       <LabelList content={<BarLabel />} />
                       {bySportChartData.map((entry, i) => (
                         <Cell
                           key={i}
-                          fill={entry.profit >= 0 ? "#22c55e" : "#ef4444"}
+                          fill={entry.profit >= 0 ? "var(--success)" : "var(--danger)"}
                           fillOpacity={0.85}
                         />
                       ))}
@@ -617,35 +728,35 @@ export default function AnalyticsPage() {
             </ChartCard>
           </div>
 
-          {/* Graf: Výkon podle dne v týdnu */}
+          {/* Den v týdnu */}
           <div style={{ marginBottom: "1.5rem" }}>
             <ChartCard
-              title="Výkon podle dne v týdnu"
-              subtitle="Profit a hitrate podle dne (Po–Ne), barva podle zisku/ztráty"
+              title="Den v týdnu"
+              subtitle="Profit podle dne (Po–Ne)"
             >
               {byDayOfWeekChartData.length ? (
                 <ResponsiveContainer width="100%" height={280}>
                   <BarChart data={byDayOfWeekChartData} margin={{ top: 20, right: 10, left: 0, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(42, 45, 62, 0.5)" vertical={false} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                     <XAxis
                       dataKey="day_name"
-                      tick={{ fill: "#8b8fa3", fontSize: 11 }}
-                      axisLine={{ stroke: "rgba(42, 45, 62, 0.5)" }}
+                      tick={{ fill: "var(--text-secondary)", fontSize: 12 }}
+                      axisLine={{ stroke: "var(--border)" }}
                       tickLine={false}
                     />
                     <YAxis
-                      tick={{ fill: "#5c6078", fontSize: 10 }}
+                      tick={{ fill: "var(--text-secondary)", fontSize: 12 }}
                       axisLine={false}
                       tickLine={false}
                       tickFormatter={(v) => `${Number(v).toLocaleString("cs-CZ")}`}
                     />
-                    <Tooltip content={<DayOfWeekTooltip />} cursor={{ fill: "rgba(99, 102, 241, 0.06)" }} />
+                    <Tooltip content={<DayOfWeekTooltip />} cursor={{ fill: "var(--accent-soft)" }} />
                     <Bar dataKey="profit" name="Profit (Kč)" radius={[8, 8, 0, 0]} maxBarSize={50}>
                       <LabelList content={<BarLabel />} />
                       {byDayOfWeekChartData.map((entry, i) => (
                         <Cell
                           key={i}
-                          fill={entry.profit >= 0 ? "#22c55e" : "#ef4444"}
+                          fill={entry.profit >= 0 ? "var(--success)" : "var(--danger)"}
                           fillOpacity={0.85}
                         />
                       ))}
@@ -658,10 +769,10 @@ export default function AnalyticsPage() {
             </ChartCard>
           </div>
 
-          {/* Graf: Hitrate podle typu sázky (s výběrem sportu) */}
+          {/* Podle typu sázky */}
           <div style={{ marginBottom: "1.5rem" }}>
             <ChartCard
-              title="Hitrate podle typu sázky"
+              title="Podle typu sázky"
               subtitle={
                 sportFilter
                   ? `Sport: ${sportOptions.find((s) => String(s.id) === sportFilter)?.name ?? "—"}`
@@ -675,9 +786,9 @@ export default function AnalyticsPage() {
                   style={{
                     padding: "6px 10px",
                     borderRadius: 8,
-                    border: "1px solid var(--color-border)",
-                    background: "var(--color-bg-input)",
-                    color: "var(--color-text-primary)",
+                    border: "1px solid var(--border)",
+                    background: "var(--bg-input)",
+                    color: "var(--text-primary)",
                     fontSize: "0.85rem",
                     minWidth: 160,
                   }}
@@ -697,12 +808,12 @@ export default function AnalyticsPage() {
                     layout="vertical"
                     margin={{ top: 8, right: 50, left: 4, bottom: 8 }}
                   >
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(42, 45, 62, 0.5)" horizontal={false} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
                     <XAxis
                       type="number"
                       domain={[0, 100]}
-                      tick={{ fill: "#5c6078", fontSize: 10 }}
-                      axisLine={{ stroke: "rgba(42, 45, 62, 0.5)" }}
+                      tick={{ fill: "var(--text-secondary)", fontSize: 12 }}
+                      axisLine={{ stroke: "var(--border)" }}
                       tickLine={false}
                       tickFormatter={(v) => `${v}%`}
                     />
@@ -710,22 +821,22 @@ export default function AnalyticsPage() {
                       type="category"
                       dataKey="market_type_name"
                       width={140}
-                      tick={{ fill: "#8b8fa3", fontSize: 11 }}
+                      tick={{ fill: "var(--text-secondary)", fontSize: 12 }}
                       axisLine={false}
                       tickLine={false}
                     />
-                    <Tooltip content={<HitrateBarTooltip />} cursor={{ fill: "rgba(99, 102, 241, 0.06)" }} />
+                    <Tooltip content={<HitrateBarTooltip />} cursor={{ fill: "var(--accent-soft)" }} />
                     <Bar dataKey="hitrate_percent" name="Hitrate %" radius={[0, 4, 4, 0]} maxBarSize={24} barCategoryGap="12%">
                       <LabelList
                         dataKey="hitrate_percent"
                         position="right"
                         formatter={(v) => `${Number(v).toFixed(0)}%`}
-                        style={{ fill: "#e4e6f0", fontSize: 11, fontWeight: 600 }}
+                        style={{ fill: "var(--text-primary)", fontSize: 12, fontWeight: 600 }}
                       />
                       {byMarketChartData.map((entry, i) => (
                         <Cell
                           key={i}
-                          fill={Number(entry.profit) >= 0 ? "#22c55e" : "#ef4444"}
+                          fill={Number(entry.profit) >= 0 ? "var(--success)" : "var(--danger)"}
                           fillOpacity={0.85}
                         />
                       ))}
@@ -738,21 +849,21 @@ export default function AnalyticsPage() {
             </ChartCard>
           </div>
 
-          {/* Graf: Trend profitu v čase */}
+          {/* Kumulativní profit v čase */}
           <div style={{ marginBottom: "1.5rem" }}>
-            <ChartCard title="Trend profitu v čase" subtitle="Kumulativní profit po dnech">
+            <ChartCard title="Kumulativní profit" subtitle="Součet profitu od začátku období (po dnech)">
               {data.profit_trend?.length ? (
                 <ResponsiveContainer width="100%" height={260}>
                   <LineChart data={data.profit_trend} margin={{ top: 20, right: 10, left: 0, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(42, 45, 62, 0.5)" vertical={false} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                     <XAxis
                       dataKey="date"
-                      tick={{ fill: "#8b8fa3", fontSize: 10 }}
-                      axisLine={{ stroke: "rgba(42, 45, 62, 0.5)" }}
+                      tick={{ fill: "var(--text-secondary)", fontSize: 12 }}
+                      axisLine={{ stroke: "var(--border)" }}
                       tickLine={false}
                     />
                     <YAxis
-                      tick={{ fill: "#5c6078", fontSize: 10 }}
+                      tick={{ fill: "var(--text-secondary)", fontSize: 12 }}
                       axisLine={false}
                       tickLine={false}
                       tickFormatter={(v) => `${Number(v).toLocaleString("cs-CZ")}`}
@@ -783,10 +894,10 @@ export default function AnalyticsPage() {
             }}
           >
             <div className="glass-card" style={{ padding: "1.25rem" }}>
-              <h3 style={{ fontSize: "0.95rem", fontWeight: 600, marginBottom: 12, color: "var(--color-red)" }}>
+              <h3 style={{ fontSize: "0.95rem", fontWeight: 600, marginBottom: 12, color: "var(--danger)" }}>
                 ⚠️ Na co si dát pozor
               </h3>
-              <p style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", marginBottom: 12 }}>
+              <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: 12 }}>
                 Kombinace sport + typ sázky s nejhorším profitem (min. {MIN_TICKETS_RECOMMEND} sázek)
               </p>
               {worstCombos.length ? (
@@ -803,7 +914,7 @@ export default function AnalyticsPage() {
                           style={{
                             display: "block",
                             padding: "8px 10px",
-                            background: "var(--color-red-soft)",
+                            background: "var(--danger-soft)",
                             borderRadius: 8,
                             fontSize: "0.8rem",
                             textDecoration: "none",
@@ -818,16 +929,16 @@ export default function AnalyticsPage() {
                   })}
                 </ul>
               ) : (
-                <p style={{ fontSize: "0.8rem", color: "var(--color-text-muted)" }}>
+                <p style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
                   Žádné kombinace s dostatečným počtem sázek.
                 </p>
               )}
             </div>
             <div className="glass-card" style={{ padding: "1.25rem" }}>
-              <h3 style={{ fontSize: "0.95rem", fontWeight: 600, marginBottom: 12, color: "var(--color-green)" }}>
+              <h3 style={{ fontSize: "0.95rem", fontWeight: 600, marginBottom: 12, color: "var(--success)" }}>
                 ✅ Silné stránky
               </h3>
-              <p style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", marginBottom: 12 }}>
+              <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: 12 }}>
                 Kombinace sport + typ sázky s nejlepším profitem (min. {MIN_TICKETS_RECOMMEND} sázek)
               </p>
               {bestCombos.length ? (
@@ -844,7 +955,7 @@ export default function AnalyticsPage() {
                           style={{
                             display: "block",
                             padding: "8px 10px",
-                            background: "var(--color-green-soft)",
+                            background: "var(--success-soft)",
                             borderRadius: 8,
                             fontSize: "0.8rem",
                             textDecoration: "none",
@@ -859,7 +970,7 @@ export default function AnalyticsPage() {
                   })}
                 </ul>
               ) : (
-                <p style={{ fontSize: "0.8rem", color: "var(--color-text-muted)" }}>
+                <p style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
                   Žádné kombinace s dostatečným počtem sázek.
                 </p>
               )}

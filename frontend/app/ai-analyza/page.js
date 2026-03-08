@@ -23,30 +23,8 @@ import { DashboardSkeleton } from "../components/Skeletons";
 function ChartTooltip({ active, payload, label }) {
   if (!active || !payload || !payload.length) return null;
   return (
-    <div
-      style={{
-        background: "rgba(22, 24, 34, 0.95)",
-        border: "1px solid rgba(99, 102, 241, 0.25)",
-        borderRadius: 12,
-        padding: "12px 16px",
-        fontSize: "0.8rem",
-        backdropFilter: "blur(12px)",
-        boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
-        minWidth: 180,
-      }}
-    >
-      <p
-        style={{
-          color: "#8b8fa3",
-          marginBottom: 6,
-          fontWeight: 600,
-          fontSize: "0.7rem",
-          textTransform: "uppercase",
-          letterSpacing: "0.05em",
-        }}
-      >
-        {label}
-      </p>
+    <div className="chart-tooltip" style={{ minWidth: 180 }}>
+      <p className="chart-tooltip-label">{label}</p>
       {payload.map((p, i) => (
         <div
           key={i}
@@ -57,8 +35,8 @@ function ChartTooltip({ active, payload, label }) {
             marginBottom: 2,
           }}
         >
-          <span style={{ color: "#a0a4b8" }}>{p.name}</span>
-          <span style={{ color: "#e4e6f0", fontWeight: 600 }}>
+          <span style={{ color: "var(--text-secondary)" }}>{p.name}</span>
+          <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>
             {Number(p.value).toLocaleString("cs-CZ")} Kč
           </span>
         </div>
@@ -79,7 +57,7 @@ function GlassCard({ title, subtitle, children }) {
             <p
               style={{
                 fontSize: "0.75rem",
-                color: "var(--color-text-muted)",
+                color: "var(--text-muted)",
                 marginTop: 2,
               }}
             >
@@ -99,7 +77,7 @@ function EmptyState({ label }) {
       style={{
         textAlign: "center",
         padding: "2.5rem 0",
-        color: "var(--color-text-muted)",
+        color: "var(--text-muted)",
       }}
     >
       <p style={{ fontSize: "2rem", marginBottom: 8, opacity: 0.4 }}>🤖</p>
@@ -263,7 +241,7 @@ export default function AiAnalyzaPage() {
           <p
             style={{
               fontSize: "0.9rem",
-              color: "var(--color-text-secondary)",
+              color: "var(--text-secondary)",
               maxWidth: 640,
             }}
           >
@@ -284,7 +262,7 @@ export default function AiAnalyzaPage() {
           <span
             style={{
               fontSize: "0.75rem",
-              color: "var(--color-text-muted)",
+              color: "var(--text-muted)",
               textAlign: "right",
             }}
           >
@@ -316,7 +294,7 @@ export default function AiAnalyzaPage() {
               <p
                 style={{
                   fontSize: "0.8rem",
-                  color: "var(--color-text-secondary)",
+                  color: "var(--text-secondary)",
                   marginTop: 4,
                 }}
               >
@@ -336,7 +314,7 @@ export default function AiAnalyzaPage() {
                   </strong>{" "}
                   ({overview.max_drawdown_percent || 0}%)
                 </div>
-                <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)" }}>
+                <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>
                   Aktuální série:{" "}
                   <strong>{overview.current_streak || 0}</strong> • Nejlepší
                   série výher:{" "}
@@ -352,7 +330,7 @@ export default function AiAnalyzaPage() {
               <p
                 style={{
                   fontSize: "0.8rem",
-                  color: "var(--color-text-secondary)",
+                  color: "var(--text-secondary)",
                   marginTop: 4,
                 }}
               >
@@ -387,24 +365,24 @@ export default function AiAnalyzaPage() {
                   >
                     <defs>
                       <linearGradient id="aiProfitGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#6366f1" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                        <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="var(--accent)" stopOpacity={0} />
                       </linearGradient>
                     </defs>
                     <CartesianGrid
                       strokeDasharray="3 3"
-                      stroke="rgba(42, 45, 62, 0.5)"
+                      stroke="var(--border)"
                       vertical={false}
                     />
                     <XAxis
                       dataKey="date"
-                      tick={{ fill: "#5c6078", fontSize: 10 }}
-                      axisLine={{ stroke: "rgba(42, 45, 62, 0.5)" }}
+                      tick={{ fill: "var(--text-secondary)", fontSize: 12 }}
+                      axisLine={{ stroke: "var(--border)" }}
                       tickLine={false}
                       tickFormatter={(d) => d.slice(5)}
                     />
                     <YAxis
-                      tick={{ fill: "#5c6078", fontSize: 10 }}
+                      tick={{ fill: "var(--text-secondary)", fontSize: 12 }}
                       axisLine={false}
                       tickLine={false}
                       tickFormatter={(v) =>
@@ -416,7 +394,7 @@ export default function AiAnalyzaPage() {
                       type="monotone"
                       dataKey="cumulative_profit"
                       name="Kumulativní profit"
-                      stroke="#6366f1"
+                      stroke="var(--accent)"
                       strokeWidth={2.5}
                       fill="url(#aiProfitGradient)"
                       dot={false}
@@ -466,11 +444,11 @@ export default function AiAnalyzaPage() {
                             padding: "8px 10px",
                             borderRadius: 10,
                             border: isActive
-                              ? "1px solid var(--color-accent)"
-                              : "1px solid var(--color-border)",
+                              ? "1px solid var(--accent)"
+                              : "1px solid var(--border)",
                             background: isActive
-                              ? "var(--color-accent-soft)"
-                              : "var(--color-bg-card)",
+                              ? "var(--accent-soft)"
+                              : "var(--bg-card)",
                             fontSize: "0.8rem",
                             cursor: "pointer",
                           }}
@@ -478,7 +456,7 @@ export default function AiAnalyzaPage() {
                           <div
                             style={{
                               fontSize: "0.75rem",
-                              color: "var(--color-text-muted)",
+                              color: "var(--text-muted)",
                               marginBottom: 4,
                             }}
                           >
@@ -486,7 +464,7 @@ export default function AiAnalyzaPage() {
                           </div>
                           <div
                             style={{
-                              color: "var(--color-text-primary)",
+                              color: "var(--text-primary)",
                               whiteSpace: "nowrap",
                               overflow: "hidden",
                               textOverflow: "ellipsis",
@@ -532,7 +510,7 @@ export default function AiAnalyzaPage() {
                           fontWeight: 700,
                           textTransform: "uppercase",
                           letterSpacing: "0.05em",
-                          color: "var(--color-text-muted)",
+                          color: "var(--text-muted)",
                           marginBottom: 4,
                         }}
                       >
@@ -549,7 +527,7 @@ export default function AiAnalyzaPage() {
                           fontWeight: 700,
                           textTransform: "uppercase",
                           letterSpacing: "0.05em",
-                          color: "var(--color-text-muted)",
+                          color: "var(--text-muted)",
                           marginBottom: 4,
                         }}
                       >
@@ -569,7 +547,7 @@ export default function AiAnalyzaPage() {
                           fontWeight: 700,
                           textTransform: "uppercase",
                           letterSpacing: "0.05em",
-                          color: "#22c55e",
+                          color: "var(--success)",
                           marginBottom: 4,
                         }}
                       >
@@ -586,7 +564,7 @@ export default function AiAnalyzaPage() {
                           fontWeight: 700,
                           textTransform: "uppercase",
                           letterSpacing: "0.05em",
-                          color: "#ef4444",
+                          color: "var(--danger)",
                           marginBottom: 4,
                         }}
                       >
@@ -603,7 +581,7 @@ export default function AiAnalyzaPage() {
                           fontWeight: 700,
                           textTransform: "uppercase",
                           letterSpacing: "0.05em",
-                          color: "var(--color-text-muted)",
+                          color: "var(--text-muted)",
                           marginBottom: 4,
                         }}
                       >

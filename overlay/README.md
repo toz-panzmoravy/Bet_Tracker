@@ -16,7 +16,7 @@ Overlay **nečte stránky sázkařů přímo**. Data mu dodává **BetTracker ba
 
 ## Požadavky
 
-- **BetTracker backend** musí být spuštěný (výchozí adresa `http://127.0.0.1:8000`). Bez běžícího backendu overlay nemá data a zobrazí chybu.
+- **BetTracker backend** musí být spuštěný (výchozí adresa `http://127.0.0.1:15555`). Bez běžícího backendu overlay nemá data a zobrazí chybu.
 - Pro **sestavení .exe** potřebujete:
   - [Node.js](https://nodejs.org/) (LTS)
   - [Rust](https://www.rust-lang.org/tools/install) (`rustup`)
@@ -77,7 +77,7 @@ Pokud po dvojkliku na .exe **nic neběží** (žádné okno, žádná chyba), pr
 1. Spusťte BetTracker backend (např. `uv run uvicorn app.main:app --reload` v adresáři `backend`).
 2. Spusťte overlay (.exe nebo `npx tauri dev`).
 3. V nastavení (ikona ozubeného kolečka) můžete změnit:
-   - **URL API** – výchozí `http://127.0.0.1:8000/api`
+   - **URL API** – výchozí `http://127.0.0.1:15555/api`
    - **Interval obnovení** (sekundy) – výchozí 60
    - **Okno „brzy začíná“** (hodiny) – výchozí 6
 4. Zaškrtněte **„Vždy navrch“**, aby okno nepřekrýval prohlížeč.
@@ -85,10 +85,10 @@ Pokud po dvojkliku na .exe **nic neběží** (žádné okno, žádná chyba), pr
 
 ## Co overlay zobrazuje
 
-- **Brzy začíná** – tikety s `event_date` v nastaveném časovém okně (výchozí 6 h), řazené podle data.
-- **Teď live** – tikety s `is_live === true`; u každého lze zobrazit naposledy uložený stav z extension (`last_live_snapshot`).
+- **Vsazené – zápas nezačal** – tikety s `event_date` v nastaveném časovém okně (výchozí 24 h).
+- **Právě hraje (live)** a **Ostatní aktivní (AKU)** – live a aktivní tikety.
 
-Klik na řádek otevře stránku s tikety v BetTrackeru (výchozí `http://127.0.0.1:3000/tikety` – předpoklad, že frontend běží na portu 3000).
+Klik na řádek otevře tiket u sázkové kanceláře (nebo BetTracker) (výchozí `http://127.0.0.1:3001/tikety` – předpoklad, že frontend běží na portu 3001).
 
 ## Ikony
 

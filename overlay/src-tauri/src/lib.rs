@@ -27,9 +27,47 @@ fn kill_other_instances() {
 #[cfg(not(target_os = "windows"))]
 fn kill_other_instances() {}
 
+/// Šířka okna při „maximalizaci“ k pravému okraji (oba sloupce + menu).
+const EXPANDED_WIDTH: f64 = 440.0;
+
 #[tauri::command]
 fn set_always_on_top(window: tauri::Window, value: bool) -> Result<(), String> {
     window.set_always_on_top(value).map_err(|e| e.to_string())
+}
+
+/// Maximální podíl výšky monitoru při „roztažení“ (0.0–1.0). Menší než 1.0 = okno lze táhnout.
+const EXPANDED_HEIGHT_RATIO: f64 = 0.88;
+
+/// Roztáhne okno k pravému okraji s výškou max ~88 % monitoru, aby šlo okno pořád táhnout.
+#[tauri::command]
+fn set_window_expanded(app: tauri::AppHandle, expanded: bool) -> Result<(), String> {
+    if !expanded {
+        return Ok(());
+    }
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| "Okno main nenalezeno".to_string())?;
+    let monitor = window
+        .current_monitor()
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "Monitor nenalezen".to_string())?;
+    let size = monitor.size();
+    let pos = monitor.position();
+    let max_height = (size.height as f64 * EXPANDED_HEIGHT_RATIO).round() as u32;
+    let height = max_height.max(200);
+    let width = EXPANDED_WIDTH.min(size.width as f64);
+    let x = pos.x as f64 + (size.width as f64) - width;
+    let y = pos.y as f64;
+    window
+        .set_size(tauri::PhysicalSize {
+            width: width as u32,
+            height,
+        })
+        .map_err(|e| e.to_string())?;
+    window
+        .set_position(tauri::PhysicalPosition { x, y })
+        .map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 /// Zavře modal nastavení ve frontendu (pošle událost).
@@ -65,7 +103,7 @@ pub fn run() {
                 })
                 .build(),
         )
-        .invoke_handler(tauri::generate_handler![set_always_on_top, close_settings_modal])
+        .invoke_handler(tauri::generate_handler![set_always_on_top, set_window_expanded, close_settings_modal])
         .setup(|app| {
             let app_handle = app.handle().clone();
             for &ms in &[1500_u64, 3000] {

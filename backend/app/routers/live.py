@@ -1,5 +1,5 @@
 """
-LIVE – příjem scraped stavu zápasu, vyhodnocení přes AI, webhook notifikace.
+LIVE – příjem scraped stavu zápasu od extension, vyhodnocení přes AI, webhook notifikace.
 """
 import logging
 import re
@@ -8,10 +8,10 @@ from typing import Optional
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
-from app.models import AppSettings, Ticket
+from app.models import AppSettings, Ticket, TicketStatus
 from app.schemas import LiveTicketStateIn, LiveLinkIn
 from app.llm.client import evaluate_live_ticket_state
 
@@ -81,26 +81,24 @@ async def post_live_state(data: LiveTicketStateIn, db: Session = Depends(get_db)
     uloží live_match_url/tipsport_match_id, vyhodnotí stav přes AI, při změně/konci pošle webhook.
     """
     ticket = None
+    q = db.query(Ticket).options(joinedload(Ticket.bookmaker))
     if data.ticket_id is not None:
-        ticket = db.query(Ticket).filter(Ticket.id == data.ticket_id).first()
+        ticket = q.filter(Ticket.id == data.ticket_id).first()
     if not ticket and data.tipsport_match_id:
-        ticket = db.query(Ticket).filter(Ticket.tipsport_match_id == data.tipsport_match_id).first()
+        ticket = q.filter(Ticket.tipsport_match_id == data.tipsport_match_id).first()
     if not ticket and data.live_match_url:
         match_id = _match_id_from_url(data.live_match_url)
         if match_id:
-            ticket = db.query(Ticket).filter(Ticket.tipsport_match_id == match_id).first()
+            ticket = q.filter(Ticket.tipsport_match_id == match_id).first()
         if not ticket:
-            ticket = db.query(Ticket).filter(Ticket.live_match_url == data.live_match_url).first()
+            ticket = q.filter(Ticket.live_match_url == data.live_match_url).first()
     if not ticket:
-        # Extension posílá stav i pro zápasy, které v DB nemáme (uživatel otevřel live stránku bez propojeného tiketu).
-        # Vrátíme 200 s ok: False, aby extension nedostala 404 a nepřetěžovala backend opakovanými pokusy.
         return {
             "ok": False,
             "ticket_id": None,
             "detail": "Tiket nenalezen (ticket_id nebo tipsport_match_id). Propojte tiket přes detail tiketu na Tipsportu.",
         }
 
-    # Uložit live_match_url a tipsport_match_id na tiket při prvním příjmu
     if data.live_match_url:
         ticket.live_match_url = data.live_match_url
         mid = _match_id_from_url(data.live_match_url)
@@ -133,10 +131,22 @@ async def post_live_state(data: LiveTicketStateIn, db: Session = Depends(get_db)
     }
     ticket.last_live_snapshot = snapshot
     ticket.last_live_at = datetime.utcnow()
+
+    result = eval_result.get("result")
+    if not result and scraped_text:
+        low = scraped_text.lower()
+        if "výhra" in low or "vyhra" in low or "win" in low:
+            result = "won"
+        elif "prohra" in low or "loss" in low or "prohr" in low:
+            result = "lost"
+    if (eval_result.get("match_ended") or result) and result in ("won", "lost"):
+        ticket.status = TicketStatus.won if result == "won" else TicketStatus.lost
+        ticket.is_live = False
+        logger.info("LIVE: tiket %s vyhodnocen jako %s, odstraněn z overlay", ticket.id, result)
+
     db.add(ticket)
     db.commit()
 
-    # Webhook při konci zápasu nebo při významné změně (např. první detekce match_ended)
     send_webhook = False
     event = "change"
     if eval_result.get("match_ended") and eval_result.get("result"):

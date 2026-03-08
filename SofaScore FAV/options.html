@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nastavení SofaScore FAV</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+      padding: 20px;
+      max-width: 480px;
+      margin: 0 auto;
+    }
+    h1 { font-size: 1.25rem; color: #334155; margin-bottom: 1rem; }
+    .option { margin-bottom: 1rem; }
+    .option label { display: block; font-weight: 600; color: #475569; margin-bottom: 0.5rem; }
+    input[type="text"] {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      font-size: 14px;
+      box-sizing: border-box;
+    }
+    .hint { font-size: 12px; color: #64748b; margin-top: 0.25rem; }
+  </style>
+</head>
+<body>
+  <h1>Nastavení SofaScore FAV</h1>
+  <div class="option">
+    <label for="api-url">URL BetTracker API (backend)</label>
+    <input type="text" id="api-url" placeholder="http://127.0.0.1:15555/api" />
+    <p class="hint">Backend API (port 15555). Výchozí: http://127.0.0.1:15555/api. Při „Failed to fetch“ zkuste http://localhost:15555/api.</p>
+  </div>
+  <script src="options.js"></script>
+</body>
+</html>

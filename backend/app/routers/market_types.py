@@ -12,6 +12,7 @@ from app.schemas.schemas import (
     MarketTypeStat,
 )
 from app.utils.market_type_normalization import normalize_market_label
+from app.utils.market_type_mapping import market_label_to_canonical
 
 router = APIRouter(prefix="/api/market-types", tags=["Typy sázek"])
 
@@ -93,13 +94,44 @@ def _market_type_with_sports(db: Session, mt_id: int):
     return db.query(MarketType).options(joinedload(MarketType.sports)).filter(MarketType.id == mt_id).first()
 
 
+def get_or_create_canonical_market_type(db: Session, raw_name: str | None):
+    """
+    Pro skripty: podle surového názvu (od sázkovky) najde nebo vytvoří typ sázky
+    s kanonickým názvem. Vrací (MarketType, created: bool). Při prázdném raw_name vrací (None, False).
+    """
+    if not raw_name or not raw_name.strip():
+        return None, False
+    name = raw_name.strip()
+    canonical = market_label_to_canonical(name)
+    name_to_use = canonical if canonical else name
+    normalized = _normalize_market_type_name(name_to_use)
+    existing = (
+        db.query(MarketType)
+        .filter(MarketType.is_active == True, MarketType.normalized_name == normalized)
+        .first()
+    )
+    if existing:
+        return existing, False
+    for mt in db.query(MarketType).filter(MarketType.is_active == True).all():
+        if _normalize_market_type_name(mt.name) == normalized:
+            return mt, False
+    mt = MarketType(name=name_to_use, normalized_name=normalized, is_active=True)
+    mt.sports = db.query(Sport).all()
+    db.add(mt)
+    db.flush()
+    return mt, True
+
+
 @router.post("/find-or-create", response_model=MarketTypeOut)
 def find_or_create_market_type(data: MarketTypeCreate, db: Session = Depends(get_db)):
-    """Najde typ sázky podle normalizovaného názvu, nebo vytvoří nový. Omezí duplicity (Over 2,5 vs Over 2.5)."""
+    """Najde typ sázky podle normalizovaného názvu, nebo vytvoří nový. Raw názvy od sázkových kanceláří se mapují na kanonický název (viz market_type_mapping), aby nevznikaly duplicity."""
     name = (data.name or "").strip()
     if not name:
         raise HTTPException(status_code=400, detail="Název nesmí být prázdný")
-    normalized = _normalize_market_type_name(name)
+    # Sjednotit na kanonický název (Vítěz → Vítěz zápasu, apod.), pak hledat/vytvořit
+    canonical = market_label_to_canonical(name)
+    name_to_use = canonical if canonical else name
+    normalized = _normalize_market_type_name(name_to_use)
 
     # 1) Primární lookup podle canonical hodnoty (normalized_name)
     existing = (
@@ -118,9 +150,9 @@ def find_or_create_market_type(data: MarketTypeCreate, db: Session = Depends(get
         if _normalize_market_type_name(mt.name) == normalized:
             return _market_type_with_sports(db, mt.id)
 
-    # 3) Vytvořit nový typ
+    # 3) Vytvořit nový typ (ukládáme kanonický / jednotný název)
     mt = MarketType(
-        name=name,
+        name=name_to_use,
         normalized_name=normalized,
         description=data.description,
         is_active=True,

@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer, Cell, Legend, LabelList
+  Tooltip, ResponsiveContainer, Cell, Legend, LabelList, ReferenceLine
 } from "recharts";
 import {
   getStatsOverview,
@@ -24,24 +24,15 @@ import Confetti from "./components/Confetti";
 function ChartTooltip({ active, payload, label, formatter }) {
   if (!active || !payload || !payload.length) return null;
   return (
-    <div style={{
-      background: "rgba(22, 24, 34, 0.95)",
-      border: "1px solid rgba(99, 102, 241, 0.25)",
-      borderRadius: 12,
-      padding: "12px 16px",
-      fontSize: "0.8rem",
-      backdropFilter: "blur(12px)",
-      boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
-      minWidth: 160,
-    }}>
-      <p style={{ color: "#8b8fa3", marginBottom: 6, fontWeight: 600, fontSize: "0.7rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>{label}</p>
+    <div className="chart-tooltip">
+      <p className="chart-tooltip-label">{label}</p>
       {payload.map((p, i) => (
         <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 16, marginBottom: 2 }}>
           <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <span style={{ width: 8, height: 8, borderRadius: "50%", background: p.color, display: "inline-block" }} />
-            <span style={{ color: "#a0a4b8" }}>{p.name}</span>
+            <span style={{ color: "var(--text-secondary)" }}>{p.name}</span>
           </span>
-          <span style={{ color: "#e4e6f0", fontWeight: 600 }}>
+          <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>
             {formatter ? formatter(p.value, p.name) : (typeof p.value === 'number' ? Number(p.value).toLocaleString("cs-CZ") : p.value)}
           </span>
         </div>
@@ -57,26 +48,17 @@ function RichBarTooltip({ active, payload, label }) {
   const d = payload[0]?.payload;
   if (!d) return null;
   return (
-    <div style={{
-      background: "rgba(22, 24, 34, 0.95)",
-      border: "1px solid rgba(99, 102, 241, 0.25)",
-      borderRadius: 12,
-      padding: "14px 18px",
-      fontSize: "0.8rem",
-      backdropFilter: "blur(12px)",
-      boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
-      minWidth: 180,
-    }}>
-      <p style={{ color: "#e4e6f0", fontWeight: 700, marginBottom: 8, fontSize: "0.85rem" }}>{d.label}</p>
+    <div className="chart-tooltip chart-tooltip-rich">
+      <p style={{ color: "var(--text-primary)", fontWeight: 700, marginBottom: 8, fontSize: "0.85rem" }}>{d.label}</p>
       <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "4px 16px" }}>
-        <span style={{ color: "#8b8fa3" }}>ROI</span>
-        <span style={{ color: d.roi_percent >= 0 ? "#22c55e" : "#ef4444", fontWeight: 700 }}>{d.roi_percent}%</span>
-        <span style={{ color: "#8b8fa3" }}>Sázek</span>
-        <span style={{ color: "#e4e6f0", fontWeight: 600 }}>{d.bets_count}</span>
-        <span style={{ color: "#8b8fa3" }}>Vklad</span>
-        <span style={{ color: "#e4e6f0", fontWeight: 600 }}>{Number(d.stake_total || 0).toLocaleString("cs-CZ")} Kč</span>
-        <span style={{ color: "#8b8fa3" }}>Profit</span>
-        <span style={{ color: Number(d.profit_total || 0) >= 0 ? "#22c55e" : "#ef4444", fontWeight: 600 }}>
+        <span style={{ color: "var(--text-muted)" }}>ROI</span>
+        <span style={{ color: d.roi_percent >= 0 ? "var(--success)" : "var(--danger)", fontWeight: 700 }}>{d.roi_percent}%</span>
+        <span style={{ color: "var(--text-muted)" }}>Sázek</span>
+        <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>{d.bets_count}</span>
+        <span style={{ color: "var(--text-muted)" }}>Vklad</span>
+        <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>{Number(d.stake_total || 0).toLocaleString("cs-CZ")} Kč</span>
+        <span style={{ color: "var(--text-muted)" }}>Profit</span>
+        <span style={{ color: Number(d.profit_total || 0) >= 0 ? "var(--success)" : "var(--danger)", fontWeight: 600 }}>
           {Number(d.profit_total || 0) > 0 ? "+" : ""}{Number(d.profit_total || 0).toLocaleString("cs-CZ")} Kč
         </span>
       </div>
@@ -91,11 +73,11 @@ function BarLabel({ x, y, width, value }) {
   return (
     <text
       x={x + width / 2}
-      y={value >= 0 ? y - 8 : y + 20}
-      fill={value >= 0 ? "#22c55e" : "#ef4444"}
+      y={value >= 0 ? y - 10 : y + 22}
+      fill={value >= 0 ? "var(--success)" : "var(--danger)"}
       textAnchor="middle"
-      fontSize={11}
-      fontWeight={600}
+      fontSize={12}
+      fontWeight={700}
     >
       {value > 0 ? "+" : ""}{value}%
     </text>
@@ -106,8 +88,8 @@ function BarLabel({ x, y, width, value }) {
 
 function RoiBarChart({
   data,
-  positiveColor = "#22c55e",
-  negativeColor = "#ef4444",
+  positiveColor = "var(--success)",
+  negativeColor = "var(--danger)",
   colorMap = null,
   highlightBest = false,
   onBarClick,
@@ -130,23 +112,26 @@ function RoiBarChart({
       : null;
 
   return (
-    <ResponsiveContainer width="100%" height={280}>
-      <BarChart data={data} margin={{ top: 20, right: 10, left: 0, bottom: 5 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="rgba(42, 45, 62, 0.5)" vertical={false} />
+    <ResponsiveContainer width="100%" height={300}>
+      <BarChart data={data} margin={{ top: 24, right: 16, left: 8, bottom: 8 }} barCategoryGap={14}>
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} opacity={0.8} />
+        <ReferenceLine y={0} stroke="var(--text-muted)" strokeWidth={1.5} strokeDasharray="4 4" />
         <XAxis
           dataKey="label"
-          tick={{ fill: "#8b8fa3", fontSize: 11 }}
-          axisLine={{ stroke: "rgba(42, 45, 62, 0.5)" }}
+          tick={{ fill: "var(--text-secondary)", fontSize: 12, fontWeight: 500 }}
+          axisLine={{ stroke: "var(--border)" }}
           tickLine={false}
+          interval={0}
         />
         <YAxis
-          tick={{ fill: "#5c6078", fontSize: 10 }}
+          tick={{ fill: "var(--text-secondary)", fontSize: 12 }}
           axisLine={false}
           tickLine={false}
           tickFormatter={(v) => `${v}%`}
+          width={36}
         />
-        <Tooltip content={<RichBarTooltip />} cursor={{ fill: "rgba(99, 102, 241, 0.06)" }} />
-        <Bar dataKey="roi_percent" name="ROI %" radius={[8, 8, 0, 0]} maxBarSize={50}>
+        <Tooltip content={<RichBarTooltip />} cursor={{ fill: "var(--surface-subtle)", stroke: "var(--border)" }} />
+        <Bar dataKey="roi_percent" name="ROI %" radius={[8, 8, 0, 0]} maxBarSize={52}>
           <LabelList content={<BarLabel />} />
           {data.map((entry, i) => {
             let fill = entry.roi_percent >= 0 ? positiveColor : negativeColor;
@@ -160,7 +145,7 @@ function RoiBarChart({
                 cursor={onBarClick ? "pointer" : "default"}
                 fill={fill}
                 fillOpacity={isBest ? 1 : 0.85}
-                stroke={isBest ? "#e5e7eb" : "none"}
+                stroke={isBest ? "var(--border-hover)" : "none"}
                 strokeWidth={isBest ? 1.5 : 0}
                 onClick={onBarClick ? () => onBarClick(entry) : undefined}
               />
@@ -178,8 +163,8 @@ function ChartCard({ title, subtitle, children }) {
   return (
     <div className="glass-card" style={{ padding: "1.25rem" }}>
       <div style={{ marginBottom: 16 }}>
-        <h3 style={{ fontSize: "0.9rem", fontWeight: 600 }}>{title}</h3>
-        {subtitle && <p style={{ fontSize: "0.7rem", color: "var(--color-text-muted)", marginTop: 2 }}>{subtitle}</p>}
+        <h3 className="card-title">{title}</h3>
+        {subtitle && <p className="section-subtitle" style={{ marginTop: 2, fontSize: "0.7rem" }}>{subtitle}</p>}
       </div>
       {children}
     </div>
@@ -191,7 +176,7 @@ function ChartCard({ title, subtitle, children }) {
 function EmptyState({ hasFilters = false, onResetFilters }) {
   const hasReset = hasFilters && typeof onResetFilters === "function";
   return (
-    <div style={{ textAlign: "center", padding: "3rem 0", color: "var(--color-text-muted)" }}>
+    <div style={{ textAlign: "center", padding: "3rem 0", color: "var(--text-muted)" }}>
       <p style={{ fontSize: "2.5rem", marginBottom: 8, opacity: 0.4 }}>📊</p>
       <p style={{ fontSize: "0.85rem" }}>
         {hasFilters ? "Žádná data pro zvolený rozsah filtrů" : "Žádná data k zobrazení"}
@@ -232,32 +217,32 @@ function MonthlyStatsTable({ data, emptyHasFilters = false, emptyOnReset }) {
       <table className="data-table" style={{ borderCollapse: "separate", borderSpacing: "0 4px" }}>
         <thead>
           <tr>
-            <th style={{ background: "var(--color-bg-card)", color: "var(--color-text-primary)", padding: "10px", borderBottom: "1px solid var(--color-border)" }}>Měsíc</th>
-            <th style={{ background: "var(--color-bg-card)", color: "var(--color-text-primary)", padding: "10px", borderBottom: "1px solid var(--color-border)" }}>Počet tipů</th>
-            <th style={{ background: "var(--color-bg-card)", color: "var(--color-text-primary)", padding: "10px", borderBottom: "1px solid var(--color-border)" }}>WIN</th>
-            <th style={{ background: "var(--color-bg-card)", color: "var(--color-text-primary)", padding: "10px", borderBottom: "1px solid var(--color-border)" }}>LOSE</th>
-            <th style={{ background: "var(--color-bg-card)", color: "var(--color-text-primary)", padding: "10px", borderBottom: "1px solid var(--color-border)" }}>STORNO</th>
-            <th style={{ background: "var(--color-bg-card)", color: "var(--color-text-primary)", padding: "10px", borderBottom: "1px solid var(--color-border)" }}>Profit</th>
-            <th style={{ background: "var(--color-bg-card)", color: "var(--color-text-primary)", padding: "10px", borderBottom: "1px solid var(--color-border)" }}>ROI</th>
-            <th style={{ background: "var(--color-bg-card)", color: "var(--color-text-primary)", padding: "10px", borderBottom: "1px solid var(--color-border)" }}>Kurz</th>
+            <th style={{ background: "var(--bg-card)", color: "var(--text-primary)", padding: "10px", borderBottom: "1px solid var(--border)" }}>Měsíc</th>
+            <th style={{ background: "var(--bg-card)", color: "var(--text-primary)", padding: "10px", borderBottom: "1px solid var(--border)" }}>Počet tipů</th>
+            <th style={{ background: "var(--bg-card)", color: "var(--text-primary)", padding: "10px", borderBottom: "1px solid var(--border)" }}>WIN</th>
+            <th style={{ background: "var(--bg-card)", color: "var(--text-primary)", padding: "10px", borderBottom: "1px solid var(--border)" }}>LOSE</th>
+            <th style={{ background: "var(--bg-card)", color: "var(--text-primary)", padding: "10px", borderBottom: "1px solid var(--border)" }}>STORNO</th>
+            <th style={{ background: "var(--bg-card)", color: "var(--text-primary)", padding: "10px", borderBottom: "1px solid var(--border)" }}>Profit</th>
+            <th style={{ background: "var(--bg-card)", color: "var(--text-primary)", padding: "10px", borderBottom: "1px solid var(--border)" }}>ROI</th>
+            <th style={{ background: "var(--bg-card)", color: "var(--text-primary)", padding: "10px", borderBottom: "1px solid var(--border)" }}>Kurz</th>
           </tr>
         </thead>
         <tbody>
           {data.map((m, i) => {
             const isProfit = m.profit_total >= 0;
-            const bg = isProfit ? "var(--color-green-soft)" : "var(--color-red-soft)";
+            const bg = isProfit ? "var(--success-soft)" : "var(--danger-soft)";
             return (
               <tr key={i} style={{ background: bg }}>
-                <td style={{ padding: "8px 12px", color: "var(--color-text-primary)", fontWeight: 500 }}>{m.label}</td>
-                <td style={{ padding: "8px 12px", color: "var(--color-text-primary)", textAlign: "center" }}>{m.bets_count}</td>
-                <td style={{ padding: "8px 12px", color: "var(--color-text-primary)", textAlign: "center" }}>{m.wins_count}</td>
-                <td style={{ padding: "8px 12px", color: "var(--color-text-primary)", textAlign: "center" }}>{m.losses_count}</td>
-                <td style={{ padding: "8px 12px", color: "var(--color-text-primary)", textAlign: "center" }}>{m.voids_count}</td>
-                <td style={{ padding: "8px 12px", color: "var(--color-text-primary)", fontWeight: 600 }}>
+                <td style={{ padding: "8px 12px", color: "var(--text-primary)", fontWeight: 500 }}>{m.label}</td>
+                <td style={{ padding: "8px 12px", color: "var(--text-primary)", textAlign: "center" }}>{m.bets_count}</td>
+                <td style={{ padding: "8px 12px", color: "var(--text-primary)", textAlign: "center" }}>{m.wins_count}</td>
+                <td style={{ padding: "8px 12px", color: "var(--text-primary)", textAlign: "center" }}>{m.losses_count}</td>
+                <td style={{ padding: "8px 12px", color: "var(--text-primary)", textAlign: "center" }}>{m.voids_count}</td>
+                <td style={{ padding: "8px 12px", color: "var(--text-primary)", fontWeight: 600 }}>
                   {m.profit_total > 0 ? "+" : ""}{Number(m.profit_total).toLocaleString("cs-CZ")}
                 </td>
-                <td style={{ padding: "8px 12px", color: "var(--color-text-primary)", fontWeight: 600 }}>{m.roi_percent}%</td>
-                <td style={{ padding: "8px 12px", color: "var(--color-text-primary)" }}>ø{m.avg_odds}</td>
+                <td style={{ padding: "8px 12px", color: "var(--text-primary)", fontWeight: 600 }}>{m.roi_percent}%</td>
+                <td style={{ padding: "8px 12px", color: "var(--text-primary)" }}>ø{m.avg_odds}</td>
               </tr>
             );
           })}
@@ -273,7 +258,7 @@ function KpiCard({ label, value, suffix = "", color = "accent", icon }) {
   return (
     <div className={`kpi-card ${color}`}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <span style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", fontWeight: 500 }}>
+        <span style={{ fontSize: "0.8rem", color: "var(--text-secondary)", fontWeight: 500 }}>
           {label}
         </span>
         <span style={{ fontSize: "1.25rem" }}>{icon}</span>
@@ -283,7 +268,7 @@ function KpiCard({ label, value, suffix = "", color = "accent", icon }) {
           {value}
         </span>
         {suffix && (
-          <span style={{ fontSize: "0.875rem", color: "var(--color-text-secondary)", marginLeft: 4 }}>
+          <span style={{ fontSize: "0.875rem", color: "var(--text-secondary)", marginLeft: 4 }}>
             {suffix}
           </span>
         )}
@@ -301,21 +286,21 @@ function WeeklySummary({ data }) {
     <div className="glass-card" style={{
       padding: "12px 16px",
       flex: 1,
-      borderLeft: `3px solid ${type === 'current' ? 'var(--color-accent)' : '#8b8fa3'}`,
+      borderLeft: `3px solid ${type === 'current' ? 'var(--accent)' : 'var(--text-muted)'}`,
       display: "flex",
       flexDirection: "column",
       gap: 4
     }}>
-      <span style={{ fontSize: "0.7rem", color: "var(--color-text-muted)", fontWeight: 600, textTransform: "uppercase" }}>{title}</span>
+      <span style={{ fontSize: "0.7rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase" }}>{title}</span>
       <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
         <span style={{ fontSize: "1.1rem", fontWeight: 700 }}>
           {Number(stats?.profit_total || 0).toLocaleString("cs-CZ")} Kč
         </span>
-        <span style={{ fontSize: "0.8rem", color: stats?.roi_percent >= 0 ? "#22c55e" : "#ef4444", fontWeight: 600 }}>
+        <span style={{ fontSize: "0.8rem", color: stats?.roi_percent >= 0 ? "var(--success)" : "var(--danger)", fontWeight: 600 }}>
           {stats?.roi_percent > 0 ? "+" : ""}{stats?.roi_percent}% ROI
         </span>
       </div>
-      <span style={{ fontSize: "0.7rem", color: "var(--color-text-secondary)" }}>
+      <span style={{ fontSize: "0.7rem", color: "var(--text-secondary)" }}>
         {stats?.bets_count || 0} tipů • ø {stats?.avg_odds || 0}
       </span>
     </div>
@@ -389,8 +374,8 @@ function FilterDropdown({ filters, setFilters, sports, bookmakers }) {
         <span>🔍 Filtry</span>
         {activeCount > 0 && (
           <span style={{
-            background: "#fff",
-            color: "var(--color-accent)",
+            background: "var(--bg-primary)",
+            color: "var(--accent)",
             borderRadius: "50%",
             width: 18, height: 18,
             fontSize: "0.7rem",
@@ -411,10 +396,10 @@ function FilterDropdown({ filters, setFilters, sports, bookmakers }) {
           <div className="glass-card" style={{
             position: "absolute", top: "calc(100% + 8px)", right: 0,
             width: 280, padding: 20, zIndex: 50,
-            boxShadow: "0 10px 40px rgba(0,0,0,0.5)",
+            boxShadow: "0 10px 40px var(--shadow-strong)",
             display: "flex", flexDirection: "column", gap: 12
           }}>
-            <h4 style={{ fontSize: "0.8rem", fontWeight: 700, marginBottom: 4 }}>Nastavení filtrů</h4>
+            <h4 className="card-title" style={{ fontSize: "0.8rem", marginBottom: 4 }}>Nastavení filtrů</h4>
 
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 4 }}>
                 {DATE_PRESETS.map((p) => (
@@ -429,7 +414,7 @@ function FilterDropdown({ filters, setFilters, sports, bookmakers }) {
                       border:
                         filters._date_preset === p.id ||
                         (p.id === "all" && !filters._date_preset && !filters.date_from && !filters.date_to)
-                          ? "1px solid var(--color-accent)"
+                          ? "1px solid var(--accent)"
                           : "1px solid transparent",
                     }}
                     onClick={() => applyDatePreset(p.id, setFilters)}
@@ -440,7 +425,7 @@ function FilterDropdown({ filters, setFilters, sports, bookmakers }) {
               </div>
 
             <div className="form-group">
-              <label style={{ fontSize: "0.75rem", color: "#8b8fa3", display: "block", marginBottom: 4 }}>Sport</label>
+              <label style={{ fontSize: "0.75rem", color: "var(--text-muted)", display: "block", marginBottom: 4 }}>Sport</label>
               <select className="input" style={{ width: "100%" }}
                 value={filters.sport_id || ""}
                 onChange={(e) => setFilters({ ...filters, sport_id: e.target.value || undefined })}>
@@ -450,7 +435,7 @@ function FilterDropdown({ filters, setFilters, sports, bookmakers }) {
             </div>
 
             <div className="form-group">
-              <label style={{ fontSize: "0.75rem", color: "#8b8fa3", display: "block", marginBottom: 4 }}>Bookmaker</label>
+              <label style={{ fontSize: "0.75rem", color: "var(--text-muted)", display: "block", marginBottom: 4 }}>Bookmaker</label>
               <select className="input" style={{ width: "100%" }}
                 value={filters.bookmaker_id || ""}
                 onChange={(e) => setFilters({ ...filters, bookmaker_id: e.target.value || undefined })}>
@@ -461,13 +446,13 @@ function FilterDropdown({ filters, setFilters, sports, bookmakers }) {
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
               <div>
-                <label style={{ fontSize: "0.75rem", color: "#8b8fa3", display: "block", marginBottom: 4 }}>Od</label>
+                <label style={{ fontSize: "0.75rem", color: "var(--text-muted)", display: "block", marginBottom: 4 }}>Od</label>
                 <input type="date" className="input" style={{ width: "100%" }}
                   value={filters.date_from || ""}
                   onChange={(e) => setFilters({ ...filters, date_from: e.target.value || undefined })} />
               </div>
               <div>
-                <label style={{ fontSize: "0.75rem", color: "#8b8fa3", display: "block", marginBottom: 4 }}>Do</label>
+                <label style={{ fontSize: "0.75rem", color: "var(--text-muted)", display: "block", marginBottom: 4 }}>Do</label>
                 <input type="date" className="input" style={{ width: "100%" }}
                   value={filters.date_to || ""}
                   onChange={(e) => setFilters({ ...filters, date_to: e.target.value || undefined })} />
@@ -487,44 +472,6 @@ function FilterDropdown({ filters, setFilters, sports, bookmakers }) {
 
 /* ─── Dashboard Tabs ───────────────────────────────────── */
 
-const TABS = [
-  { id: "prehled", label: "📊 Přehled" },
-  { id: "trhy", label: "🔍 Trhy" },
-];
-
-function TabBar({ active, onChange }) {
-  return (
-    <div style={{
-      display: "flex", gap: 4,
-      background: "var(--color-bg-secondary)",
-      borderRadius: 12, padding: 4,
-      marginBottom: "1.25rem",
-    }}>
-      {TABS.map((tab) => (
-        <button
-          key={tab.id}
-          onClick={() => onChange(tab.id)}
-          style={{
-            flex: 1,
-            padding: "10px 16px",
-            borderRadius: 10,
-            border: "none",
-            cursor: "pointer",
-            fontSize: "0.85rem",
-            fontWeight: 600,
-            transition: "all 0.2s ease",
-            background: active === tab.id ? "var(--color-accent-soft)" : "transparent",
-            color: active === tab.id ? "var(--color-accent-hover)" : "var(--color-text-secondary)",
-            outline: active === tab.id ? "1px solid var(--color-accent)" : "none",
-          }}
-        >
-          {tab.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 /* ─── Main Dashboard ───────────────────────────────────── */
 
 export default function Dashboard() {
@@ -537,7 +484,6 @@ export default function Dashboard() {
   const [filters, setFilters] = useState({});
   const [sports, setSports] = useState([]);
   const [bookmakers, setBookmakers] = useState([]);
-  const [activeTab, setActiveTab] = useState("prehled");
   const [showConfetti, setShowConfetti] = useState(false);
   const [bankroll, setBankroll] = useState(null);
   const [showAiHistoryModal, setShowAiHistoryModal] = useState(false);
@@ -634,16 +580,6 @@ export default function Dashboard() {
   const o = stats?.overall || {};
   const profitColor = (o.profit_total || 0) >= 0 ? "green" : "red";
 
-  // Compute chart subtitles
-  const bestSport = stats?.by_sport?.reduce(
-    (best, s) => (!best || s.roi_percent > best.roi_percent ? s : best),
-    null
-  );
-  const bestMarket = stats?.by_market_type?.reduce(
-    (best, s) => (!best || s.roi_percent > best.roi_percent ? s : best),
-    null
-  );
-
   // Připravíme data pro ROI grafy: seřazeno a s minimálním počtem sázek, aby ROI z 1–2 tiketů nezkreslovalo
   function prepareGrouped(data, { minBets = 5, sortBy = "roi", limit = 10 } = {}) {
     if (!data) return [];
@@ -663,25 +599,10 @@ export default function Dashboard() {
     sortBy: "roi",
     limit: 8,
   });
-  const byBookmakerPrepared = prepareGrouped(stats?.by_bookmaker, {
-    minBets: 5,
-    sortBy: "roi",
-    limit: 8,
-  });
-  const byLeaguePrepared = prepareGrouped(stats?.by_league, {
-    minBets: 5,
-    sortBy: "roi",
-    limit: 12,
-  });
   const byMarketPrepared = prepareGrouped(stats?.by_market_type, {
     minBets: 5,
     sortBy: "roi",
     limit: 12,
-  });
-  const byOddsBucketPrepared = prepareGrouped(stats?.by_odds_bucket, {
-    minBets: 1,
-    sortBy: "roi",
-    limit: 10,
   });
 
   // Akční insighty: nejlepší / nejhorší typy sázek podle profitu
@@ -731,33 +652,11 @@ export default function Dashboard() {
     openTickets({ sport_id: sport.id });
   }
 
-  function handleBookmakerBarClick(entry) {
-    if (!entry) return;
-    const bookmaker = bookmakers.find((b) => b.name === entry.label);
-    if (!bookmaker) return;
-    openTickets({ bookmaker_id: bookmaker.id });
-  }
-
   function handleMarketBarClick(entry) {
     if (!entry) return;
     const mt = marketTypes.find((m) => m.name === entry.label);
     if (!mt) return;
     openTickets({ market_type_id: mt.id });
-  }
-
-  const ODDS_BUCKET_RANGES = {
-    "1.01–1.50": { odds_min: 1.01, odds_max: 1.5 },
-    "1.51–2.00": { odds_min: 1.51, odds_max: 2.0 },
-    "2.01–3.00": { odds_min: 2.01, odds_max: 3.0 },
-    "3.01–5.00": { odds_min: 3.01, odds_max: 5.0 },
-    "5.01+": { odds_min: 5.01 },
-  };
-
-  function handleOddsBucketBarClick(entry) {
-    if (!entry) return;
-    const range = ODDS_BUCKET_RANGES[entry.label];
-    if (!range) return;
-    openTickets(range);
   }
 
   function handleMarketInsightClick(label) {
@@ -814,18 +713,17 @@ export default function Dashboard() {
   }
 
   const maxDrawdownAmount = Number(o.max_drawdown || 0);
-  const maxDrawdownPercent = o.max_drawdown_percent || 0;
-  const worstStreak = o.worst_streak || 0;
-
   const bankrollNumber = bankroll != null ? Number(bankroll) : null;
   let recommendedUnit = "Nastav bankroll v Nastavení";
   if (bankrollNumber && bankrollNumber > 0) {
     const low = Math.max(1, Math.round(bankrollNumber * 0.01));
     const high = Math.max(low, Math.round(bankrollNumber * 0.02));
-    recommendedUnit = `${low.toLocaleString("cs-CZ")}–${high.toLocaleString(
-      "cs-CZ"
-    )} Kč`;
+    recommendedUnit = `${low.toLocaleString("cs-CZ")}–${high.toLocaleString("cs-CZ")} Kč`;
   }
+  const bankrollReturnPct =
+    bankrollNumber && bankrollNumber > 0
+      ? ((Number(o.profit_total || 0) / bankrollNumber) * 100).toFixed(2)
+      : null;
 
   const hasRealFilters = Object.entries(filters || {}).some(
     ([key, value]) =>
@@ -894,15 +792,15 @@ export default function Dashboard() {
   const filterSummaryText = formatDashboardFiltersSummary();
 
   return (
-    <div>
+    <div className="content-width">
       <Confetti active={showConfetti} onDone={() => setShowConfetti(false)} />
 
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.5rem" }}>
+      <header className="page-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 16 }}>
         <div>
-          <h1 style={{ fontSize: "1.5rem", fontWeight: 700 }}>Dashboard</h1>
-          <p style={{ fontSize: "0.85rem", color: "var(--color-text-secondary)" }}>
-            Přehled tvých sázkových výsledků
+          <h1 className="page-title">Dashboard</h1>
+          <p className="page-subtitle">
+            Nejdůležitější čísla a kde vyděláváš vs. ztrácíš
           </p>
         </div>
         <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
@@ -931,13 +829,13 @@ export default function Dashboard() {
             📜 Historie analýz
           </button>
         </div>
-      </div>
+      </header>
 
       {/* Weekly Summary */}
       {!loading && stats?.weekly && <WeeklySummary data={stats.weekly} />}
 
       {/* Filters summary */}
-      <p style={{ fontSize: "0.75rem", color: "var(--color-text-secondary)", marginBottom: "0.75rem" }}>
+      <p style={{ fontSize: "0.75rem", color: "var(--text-secondary)", marginBottom: "0.75rem" }}>
         Aktuální filtry: {filterSummaryText}
       </p>
 
@@ -946,8 +844,8 @@ export default function Dashboard() {
         <DashboardSkeleton />
       ) : (
         <>
-          {/* KPI Cards */}
-          <div className="dashboard-kpi-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: "1rem" }}>
+          {/* KPI – jen to nejdůležitější pro sázkaře */}
+          <div className="dashboard-kpi-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: "1.5rem" }}>
             <KpiCard
               label="Celkový profit"
               value={`${Number(o.profit_total || 0).toLocaleString("cs-CZ")} Kč`}
@@ -967,143 +865,119 @@ export default function Dashboard() {
               icon="🎯"
             />
             <KpiCard
-              label="Obrat sázek (vkladů)"
-              value={`${Number(o.stake_total || 0).toLocaleString("cs-CZ")} Kč`}
-              color="accent"
-              icon="💵"
-            />
-          </div>
-          <div className="dashboard-kpi-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: "1.5rem" }}>
-            <KpiCard
               label="Počet sázek"
               value={o.bets_count || 0}
-              color="yellow"
+              color="accent"
               icon="🎫"
-            />
-            <KpiCard
-              label="Max drawdown"
-              value={
-                maxDrawdownAmount > 0
-                  ? `-${maxDrawdownAmount.toLocaleString("cs-CZ")} Kč`
-                  : "0 Kč"
-              }
-              suffix={
-                maxDrawdownAmount > 0 ? ` (${maxDrawdownPercent || 0} %)` : ""
-              }
-              color="red"
-              icon="📉"
-            />
-            <KpiCard
-              label="Ø Kurz"
-              value={o.avg_odds || 0}
-              color="accent"
-              icon="📊"
-            />
-            <KpiCard
-              label="💼 Bankroll"
-              value={
-                bankroll != null
-                  ? `${Number(bankroll).toLocaleString("cs-CZ")} Kč`
-                  : "Nenastaveno"
-              }
-              color="accent"
-              icon="💼"
-            />
-            <KpiCard
-              label="📈 Zhodnocení bankrollu"
-              value={
-                bankroll != null && Number(bankroll) > 0
-                  ? `${((Number(o.profit_total || 0) / Number(bankroll)) * 100).toFixed(2)}%`
-                  : "—"
-              }
-              color={
-                bankroll != null && Number(bankroll) > 0 && Number(o.profit_total || 0) >= 0
-                  ? "green"
-                  : bankroll != null && Number(bankroll) > 0 && Number(o.profit_total || 0) < 0
-                  ? "red"
-                  : "accent"
-              }
-              icon="📊"
-            />
-            <KpiCard
-              label="Nejdelší série proher"
-              value={worstStreak || 0}
-              suffix="proher"
-              color="red"
-              icon="🔥"
-            />
-            <KpiCard
-              label="Doporučená jednotka (1–2 %)"
-              value={recommendedUnit}
-              color="yellow"
-              icon="🧠"
             />
           </div>
 
-          {/* Tabs */}
-          <TabBar active={activeTab} onChange={setActiveTab} />
+          {/* Více čísel – drawdown, bankroll, série, jednotka */}
+          <div
+            className="glass-card"
+            style={{
+              padding: "1rem 1.25rem",
+              marginBottom: "1.5rem",
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+              gap: "1rem",
+              alignItems: "center",
+            }}
+          >
+            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              <span style={{ fontSize: "0.7rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>Max drawdown</span>
+              <span style={{ fontSize: "1rem", fontWeight: 700, color: "var(--danger)" }}>
+                {maxDrawdownAmount > 0 ? `-${maxDrawdownAmount.toLocaleString("cs-CZ")} Kč` : "0 Kč"}
+              </span>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              <span style={{ fontSize: "0.7rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>Bankroll</span>
+              <span style={{ fontSize: "1rem", fontWeight: 700, color: "var(--text-primary)" }}>
+                {bankroll != null ? `${Number(bankroll).toLocaleString("cs-CZ")} Kč` : "—"}
+              </span>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              <span style={{ fontSize: "0.7rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>Zhodnocení BR</span>
+              <span style={{ fontSize: "1rem", fontWeight: 700, color: bankrollReturnPct != null ? (Number(bankrollReturnPct) >= 0 ? "var(--success)" : "var(--danger)") : "var(--text-muted)" }}>
+                {bankrollReturnPct != null ? `${Number(bankrollReturnPct) >= 0 ? "+" : ""}${bankrollReturnPct}%` : "—"}
+              </span>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              <span style={{ fontSize: "0.7rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>Nejdelší série proher</span>
+              <span style={{ fontSize: "1rem", fontWeight: 700, color: "var(--danger)" }}>{o.worst_streak ?? 0}</span>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              <span style={{ fontSize: "0.7rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>Dop. jednotka (1–2 %)</span>
+              <span style={{ fontSize: "0.9rem", fontWeight: 600, color: "var(--text-secondary)" }}>{recommendedUnit}</span>
+            </div>
+          </div>
 
-          {/* Tab Content */}
+          {/* Grafy – kde vyděláváš vs. ztrácíš */}
           <div className="dashboard-charts-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: "1.5rem" }}>
-
-            {/* ─── Přehled ─── */}
-            {activeTab === "prehled" && (
-              <>
                 <ChartCard
                   title="📈 Profit v čase"
-                  subtitle={timeseries.length > 0 ? `${timeseries.length} dní • Poslední: ${timeseries[timeseries.length - 1]?.date}` : null}
+                  subtitle={timeseries.length > 0 ? `Trend – jde to nahoru nebo dolů? • ${timeseries.length} dní` : null}
                 >
             {timeseries.length > 0 ? (
-                    <ResponsiveContainer width="100%" height={280}>
-                      <AreaChart data={timeseries} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <AreaChart data={timeseries} margin={{ top: 16, right: 16, left: 8, bottom: 8 }}>
                         <defs>
                           <linearGradient id="profitGradient" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#6366f1" stopOpacity={0.3} />
-                            <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                            <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.4} />
+                            <stop offset="100%" stopColor="var(--accent)" stopOpacity={0} />
                           </linearGradient>
                           <linearGradient id="dailyGradient" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#22c55e" stopOpacity={0.15} />
-                            <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
+                            <stop offset="0%" stopColor="var(--success)" stopOpacity={0.25} />
+                            <stop offset="100%" stopColor="var(--success)" stopOpacity={0} />
                           </linearGradient>
                         </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(42, 45, 62, 0.5)" vertical={false} />
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} opacity={0.8} />
+                        <ReferenceLine y={0} stroke="var(--text-muted)" strokeWidth={1.5} strokeDasharray="4 4" />
                         <XAxis
                           dataKey="date"
-                          tick={{ fill: "#5c6078", fontSize: 10 }}
-                          axisLine={{ stroke: "rgba(42, 45, 62, 0.5)" }}
+                          tick={{ fill: "var(--text-secondary)", fontSize: 12, fontWeight: 500 }}
+                          axisLine={{ stroke: "var(--border)" }}
                           tickLine={false}
-                          tickFormatter={(d) => d.slice(5)} // MM-DD
+                          tickFormatter={(d) => d.slice(5)}
                         />
                         <YAxis
-                          tick={{ fill: "#5c6078", fontSize: 10 }}
+                          tick={{ fill: "var(--text-secondary)", fontSize: 12 }}
                           axisLine={false}
                           tickLine={false}
                           tickFormatter={(v) => `${v} Kč`}
+                          width={48}
                         />
                         <Tooltip
                           content={<ChartTooltip formatter={(v, name) => `${Number(v).toLocaleString("cs-CZ")} Kč`} />}
-                          cursor={{ stroke: "rgba(99, 102, 241, 0.3)", strokeWidth: 1 }}
+                          cursor={{ stroke: "var(--accent)", strokeWidth: 2, strokeOpacity: 0.5 }}
+                        />
+                        <Legend
+                          verticalAlign="bottom"
+                          height={36}
+                          iconType="line"
+                          iconSize={12}
+                          wrapperStyle={{ paddingTop: 12 }}
                         />
                         <Area
                           type="monotone"
                           dataKey="cumulative_profit"
                           name="Kumulativní profit"
-                          stroke="#6366f1"
-                          strokeWidth={2.5}
+                          stroke="var(--accent)"
+                          strokeWidth={3}
                           fill="url(#profitGradient)"
                           dot={false}
-                          activeDot={{ r: 5, strokeWidth: 2, stroke: "#6366f1", fill: "#1c1f2e" }}
+                          activeDot={{ r: 6, strokeWidth: 2, stroke: "var(--accent)", fill: "var(--bg-card)" }}
                         />
                         <Area
                           type="monotone"
                           dataKey="profit"
                           name="Denní profit"
-                          stroke="#22c55e"
-                          strokeWidth={1}
-                          strokeDasharray="5 3"
+                          stroke="var(--success)"
+                          strokeWidth={2}
+                          strokeDasharray="6 4"
                           fill="url(#dailyGradient)"
                           dot={false}
-                          activeDot={{ r: 4, strokeWidth: 2, stroke: "#22c55e", fill: "#1c1f2e" }}
+                          activeDot={{ r: 5, strokeWidth: 2, stroke: "var(--success)", fill: "var(--bg-card)" }}
                         />
                       </AreaChart>
                     </ResponsiveContainer>
@@ -1117,11 +991,7 @@ export default function Dashboard() {
 
                 <ChartCard
                   title="🏆 ROI podle sportu"
-                  subtitle={
-                    bestSport
-                      ? `Nejlepší: ${bestSport.label} (${bestSport.roi_percent > 0 ? "+" : ""}${bestSport.roi_percent}%) • Zobrazené jen sporty s ≥ 5 sázkami`
-                      : "Zobrazují se jen sporty s alespoň 5 sázkami"
-                  }
+                  subtitle="Kde vyděláváš a kde ztrácíš – klikni na sport pro filtry (min. 5 sázek)"
                 >
                   <RoiBarChart
                     data={bySportPrepared}
@@ -1133,82 +1003,22 @@ export default function Dashboard() {
                 </ChartCard>
 
                 <ChartCard
-                  title="🏢 ROI podle sázkovky"
-                  subtitle="Kde jsi nejziskovější? Zobrazené jen sázkovky s ≥ 5 sázkami"
-                >
-                  <RoiBarChart
-                    data={byBookmakerPrepared}
-                    positiveColor="#8b5cf6"
-                    highlightBest
-                    colorMap={{
-                      "Tipsport": "#3b82f6", // Modrá
-                      "Betano": "#f97316", // Oranžová
-                    }}
-                    onBarClick={handleBookmakerBarClick}
-                    emptyHasFilters={hasRealFilters}
-                    emptyOnReset={() => setFilters({})}
-                  />
-                </ChartCard>
-
-                <ChartCard
-                  title="⚽ ROI podle ligy"
-                  subtitle="Jaké soutěže ti jdou? Zobrazené jen ligy s ≥ 5 sázkami"
-                >
-                  <RoiBarChart data={byLeaguePrepared} positiveColor="#f43f5e" highlightBest />
-                </ChartCard>
-
-                <div style={{ gridColumn: "span 2" }}>
-                  <MonthlyStatsTable
-                    data={stats?.by_month}
-                    emptyHasFilters={hasRealFilters}
-                    emptyOnReset={() => setFilters({})}
-                  />
-                </div>
-              </>
-            )}
-
-            {/* ─── Trhy ─── */}
-            {activeTab === "trhy" && (
-              <>
-                <ChartCard
                   title="🎲 ROI podle typu sázky"
-                  subtitle={
-                    bestMarket
-                      ? `Nejlepší: ${bestMarket.label} (${bestMarket.roi_percent > 0 ? "+" : ""}${bestMarket.roi_percent}%) • Zobrazené jen trhy s ≥ 5 sázkami`
-                      : "Zobrazují se jen typy sázek s alespoň 5 sázkami"
-                  }
+                  subtitle="Které typy sázek ti jdou a které ne – klikni pro filtry (min. 5 sázek)"
                 >
                   <RoiBarChart
                     data={byMarketPrepared}
-                    positiveColor="#3b82f6"
+                    positiveColor="var(--info)"
                     highlightBest
                     onBarClick={handleMarketBarClick}
                     emptyHasFilters={hasRealFilters}
                     emptyOnReset={() => setFilters({})}
                   />
                 </ChartCard>
-
-                <ChartCard
-                  title="🎰 ROI podle kurzového pásma"
-                  subtitle="Kde máš edge? Seřazeno podle ROI"
-                >
-                  <RoiBarChart
-                    data={byOddsBucketPrepared}
-                    positiveColor="#eab308"
-                    highlightBest
-                    onBarClick={handleOddsBucketBarClick}
-                    emptyHasFilters={hasRealFilters}
-                    emptyOnReset={() => setFilters({})}
-                  />
-                </ChartCard>
-              </>
-            )}
-
-            {/* ─── Vzorce ZRUŠENO ─── */}
           </div>
 
-          {/* Akční insighty – nejziskovější a nejproblematičtější typy sázek */}
-          {activeTab === "trhy" && hasMarketInsights && (
+          {/* Na co sázet vs. čeho se vyvarovat – vždy viditelné když máme data */}
+          {hasMarketInsights && (
             <div
               style={{
                 display: "grid",
@@ -1223,19 +1033,19 @@ export default function Dashboard() {
                     fontSize: "0.95rem",
                     fontWeight: 600,
                     marginBottom: 12,
-                    color: "var(--color-red)",
+                    color: "var(--danger)",
                   }}
                 >
-                  ⚠️ Na co si dát pozor
+                  ⚠️ Do čeho se nepouštět
                 </h3>
                 <p
                   style={{
                     fontSize: "0.75rem",
-                    color: "var(--color-text-muted)",
+                    color: "var(--text-muted)",
                     marginBottom: 12,
                   }}
                 >
-                  Typy sázek s nejhorším profitem (min. 5 sázek v&nbsp;aktuálním filtru).
+                  Typy sázek, kde dlouhodobě ztrácíš – raději je vynech (min. 5 sázek).
                 </p>
                 {worstMarkets.length ? (
                   <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
@@ -1253,7 +1063,7 @@ export default function Dashboard() {
                             onClick={() => handleMarketInsightClick(m.label)}
                             style={{
                               padding: "8px 10px",
-                              background: "var(--color-red-soft)",
+                              background: "var(--danger-soft)",
                               borderRadius: 8,
                               fontSize: "0.8rem",
                               cursor: "pointer",
@@ -1277,7 +1087,7 @@ export default function Dashboard() {
                   <p
                     style={{
                       fontSize: "0.8rem",
-                      color: "var(--color-text-muted)",
+                      color: "var(--text-muted)",
                     }}
                   >
                     Nenašly se žádné typy sázek s dostatečným počtem tiketů.
@@ -1291,19 +1101,19 @@ export default function Dashboard() {
                     fontSize: "0.95rem",
                     fontWeight: 600,
                     marginBottom: 12,
-                    color: "var(--color-green)",
+                    color: "var(--success)",
                   }}
                 >
-                  ✅ Silné stránky
+                  ✅ Na co sázet
                 </h3>
                 <p
                   style={{
                     fontSize: "0.75rem",
-                    color: "var(--color-text-muted)",
+                    color: "var(--text-muted)",
                     marginBottom: 12,
                   }}
                 >
-                  Typy sázek, kde se ti dlouhodobě daří (min. 5 sázek v&nbsp;aktuálním filtru).
+                  Typy sázek, kde ti to vychází – tady máš edge (min. 5 sázek).
                 </p>
                 {bestMarkets.length ? (
                   <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
@@ -1321,7 +1131,7 @@ export default function Dashboard() {
                             onClick={() => handleMarketInsightClick(m.label)}
                             style={{
                               padding: "8px 10px",
-                              background: "var(--color-green-soft)",
+                              background: "var(--success-soft)",
                               borderRadius: 8,
                               fontSize: "0.8rem",
                               cursor: "pointer",
@@ -1345,7 +1155,7 @@ export default function Dashboard() {
                   <p
                     style={{
                       fontSize: "0.8rem",
-                      color: "var(--color-text-muted)",
+                      color: "var(--text-muted)",
                     }}
                   >
                     Zatím žádné trhy s dostatečným počtem sázek.
@@ -1368,11 +1178,11 @@ export default function Dashboard() {
             {aiLoading ? (
               <div style={{ textAlign: "center", padding: "3rem" }}>
                 <div className="spinner" style={{ width: 32, height: 32 }} />
-                <p style={{ marginTop: 12, color: "var(--color-text-secondary)" }}>Analyzuji tvoje sázky...</p>
+                <p style={{ marginTop: 12, color: "var(--text-secondary)" }}>Analyzuji tvoje sázky...</p>
               </div>
             ) : (
               <div style={{
-                background: "var(--color-bg-card)",
+                background: "var(--bg-card)",
                 borderRadius: 12,
                 padding: "1.25rem",
                 lineHeight: 1.7,
@@ -1397,16 +1207,16 @@ export default function Dashboard() {
             <div style={{ overflow: "auto", flex: 1 }}>
               {aiHistoryDetail ? (
                 <>
-                  <p style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", marginBottom: 4 }}>
+                  <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginBottom: 4 }}>
                     {aiHistoryDetail.created_at ? new Date(aiHistoryDetail.created_at).toLocaleString("cs-CZ") : ""}
                   </p>
                   {aiHistoryDetail.context && (
-                    <p style={{ fontSize: "0.75rem", color: "var(--color-text-secondary)", marginBottom: 12 }}>
+                    <p style={{ fontSize: "0.75rem", color: "var(--text-secondary)", marginBottom: 12 }}>
                       {formatAiFiltersSummary(aiHistoryDetail.context)}
                     </p>
                   )}
                   <div style={{
-                    background: "var(--color-bg-card)",
+                    background: "var(--bg-card)",
                     borderRadius: 12,
                     padding: "1rem",
                     lineHeight: 1.6,
@@ -1420,7 +1230,7 @@ export default function Dashboard() {
                   </button>
                 </>
               ) : aiHistoryList.length === 0 ? (
-                <p style={{ color: "var(--color-text-muted)", fontSize: "0.9rem" }}>Zatím žádné analýzy.</p>
+                <p style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}>Zatím žádné analýzy.</p>
               ) : (
                 <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
                   {aiHistoryList.map((item) => (
@@ -1430,21 +1240,21 @@ export default function Dashboard() {
                       style={{
                         padding: "12px 14px",
                         marginBottom: 8,
-                        background: "var(--color-bg-card)",
+                        background: "var(--bg-card)",
                         borderRadius: 10,
                         cursor: "pointer",
-                        border: "1px solid var(--color-border)",
+                        border: "1px solid var(--border)",
                       }}
                     >
-                      <div style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", marginBottom: 4 }}>
+                      <div style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginBottom: 4 }}>
                         {item.created_at ? new Date(item.created_at).toLocaleString("cs-CZ") : ""}
                       </div>
                       {item.context && (
-                        <div style={{ fontSize: "0.75rem", color: "var(--color-text-secondary)", marginBottom: 4 }}>
+                        <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)", marginBottom: 4 }}>
                           {formatAiFiltersSummary(item.context)}
                         </div>
                       )}
-                      <div style={{ fontSize: "0.85rem", color: "var(--color-text-primary)" }}>
+                      <div style={{ fontSize: "0.85rem", color: "var(--text-primary)" }}>
                         {(item.response_text || "").slice(0, 200)}
                         {(item.response_text || "").length > 200 ? "…" : ""}
                       </div>

@@ -28,31 +28,13 @@ export function ToastProvider({ children }) {
     return (
         <ToastContext.Provider value={{ success, error, info }}>
             {children}
-            <div style={{
-                position: "fixed", bottom: 24, right: 24, zIndex: 9999,
-                display: "flex", flexDirection: "column-reverse", gap: 8,
-                pointerEvents: "none",
-            }}>
+            <div className="toast-container">
                 {toasts.map((t) => (
                     <div
                         key={t.id}
+                        className={`toast toast-${t.type === "error" ? "error" : t.type === "info" ? "info" : "success"} ${t.leaving ? "toast-leaving" : ""}`}
                         style={{
-                            padding: "12px 20px",
-                            borderRadius: 12,
-                            fontSize: "0.85rem",
-                            fontWeight: 500,
-                            color: "#fff",
-                            pointerEvents: "auto",
                             animation: t.leaving ? "toast-out 0.3s ease forwards" : "toast-in 0.3s ease",
-                            background:
-                                t.type === "success" ? "linear-gradient(135deg, #22c55e, #16a34a)" :
-                                    t.type === "error" ? "linear-gradient(135deg, #ef4444, #dc2626)" :
-                                        "linear-gradient(135deg, #6366f1, #4f46e5)",
-                            boxShadow: "0 8px 24px rgba(0,0,0,0.3)",
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 8,
-                            maxWidth: 360,
                         }}
                     >
                         <span style={{ fontSize: "1.1rem" }}>

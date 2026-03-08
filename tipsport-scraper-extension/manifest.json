@@ -12,7 +12,8 @@
     "*://*.tipsport.cz/*",
     "*://*.betano.cz/*",
     "*://*.ifortuna.cz/*",
-    "http://127.0.0.1:8000/*"
+    "http://127.0.0.1:15555/*",
+    "http://localhost:15555/*"
   ],
   "background": {
     "service_worker": "background.js"

@@ -1,158 +1,489 @@
+/* BetTracker Overlay – dark theme, modern, přehledný */
 * {
   box-sizing: border-box;
 }
 
-/* Důležité: v author CSS máme pro .modal display:flex, což by přepsalo default HTML [hidden] => display:none.
-   Proto explicitně vynutíme skrytí elementů s hidden atributem. */
 [hidden] {
   display: none !important;
 }
+
+:root {
+  /* Tmavá paleta s jemným fialovým podtónem – bílá + fialová */
+  --bg: #0d0c0f;
+  --bg-elevated: #141218;
+  --bg-card: #1a171f;
+  --bg-hover: #221e28;
+  --border: #2a2632;
+  --border-strong: #383342;
+  --border-divider: #1f1c24;
+  /* Text */
+  --text: #f0f0f0;
+  --text-secondary: #b5b5b5;
+  --text-muted: #858585;
+  --text-key: #d4d4d4;
+  /* Akcent – fialová (violet) */
+  --accent: #8b5cf6;
+  --accent-hover: #a78bfa;
+  --accent-subtle: rgba(139, 92, 246, 0.12);
+  --live: #e54848;
+  --live-subtle: rgba(229, 72, 72, 0.12);
+  --live-pulse: rgba(229, 72, 72, 0.35);
+  --success: #22c55e;
+  --success-subtle: rgba(34, 197, 94, 0.12);
+  --error: #e54848;
+  --error-subtle: rgba(229, 72, 72, 0.1);
+  /* Sázkovky – odlišné barvy */
+  --tipsport: #0ea5e9;
+  --tipsport-subtle: rgba(14, 165, 233, 0.15);
+  --betano: #e5a00c;
+  --betano-subtle: rgba(229, 160, 12, 0.15);
+  --fortuna: #f97316;
+  --fortuna-subtle: rgba(249, 115, 22, 0.15);
+  /* Sázková příležitost – decentní zvýraznění (fialová) */
+  --bet-highlight-bg: rgba(139, 92, 246, 0.08);
+  --bet-highlight-border: rgba(139, 92, 246, 0.3);
+  --radius: 8px;
+  --radius-sm: 5px;
+  --radius-lg: 10px;
+  --radius-full: 9999px;
+  --shadow: 0 2px 12px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 6px 20px rgba(0, 0, 0, 0.5);
+  --transition: 0.18s ease;
+  --font: "DM Sans", system-ui, -apple-system, sans-serif;
+  --font-heading: "Plus Jakarta Sans", var(--font);
+}
+
 body {
   margin: 0;
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  font-family: var(--font);
   font-size: 13px;
-  background: #1a1b26;
-  color: #c0caf5;
+  line-height: 1.45;
+  background: var(--bg);
+  color: var(--text);
   min-width: 320px;
-  max-width: 420px;
+  max-width: 480px;
+  min-height: 100vh;
   user-select: none;
+  -webkit-font-smoothing: antialiased;
 }
+
 #app {
-  padding: 8px;
-  min-height: 200px;
+  padding: 10px 12px 14px;
+  min-height: 100px;
 }
+
+/* ─── Header ─────────────────────────────────────────────── */
 .header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 8px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid #3b4261;
+  margin-bottom: 10px;
+  padding: 8px 10px 10px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
 }
-.header-actions {
-  flex-shrink: 0;
-}
-.title {
-  margin: 0;
-  font-size: 1rem;
-  font-weight: 600;
-}
-.header-actions {
+
+.header-brand {
   display: flex;
   align-items: center;
   gap: 8px;
 }
-.topmost-toggle {
+
+.logo-mark {
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--accent) 0%, #7c3aed 100%);
+  color: #fff;
+  font-weight: 800;
+  font-size: 0.75rem;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 2px 6px rgba(139, 92, 246, 0.4);
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.header-actions {
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 0.75rem;
-  color: #a9b1d6;
-  cursor: pointer;
+  flex-shrink: 0;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
 }
-.topmost-toggle input {
-  cursor: pointer;
-}
-button {
-  background: #3b4261;
-  color: #c0caf5;
+
+.btn-icon {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--text-muted);
   border: none;
-  border-radius: 6px;
-  padding: 4px 8px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  font-size: 0.85rem;
+  transition: background var(--transition), color var(--transition);
 }
-button:hover {
-  background: #565f89;
+
+.btn-icon:hover {
+  background: var(--bg-hover);
+  color: var(--text);
 }
-.error {
-  color: #f7768e;
-  font-size: 0.8rem;
-  padding: 6px;
+
+.btn-icon svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.btn-pin { color: var(--text-muted); }
+.btn-pin.is-active {
+  color: var(--accent);
+  background: var(--accent-subtle);
+}
+.btn-pin.is-active:hover { color: var(--accent-hover); }
+
+#btnRefresh:hover { color: var(--success); }
+#btnSettings:hover { color: var(--accent); }
+
+/* ─── Filtr sázkovky (minimalistický: čtvereček + T, B, F) ── */
+.filter-bar {
   margin-bottom: 8px;
-  background: rgba(247, 118, 142, 0.1);
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.filter-chips {
+  display: flex;
+  gap: 8px;
+}
+
+.filter-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
   border-radius: 6px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
 }
-.section {
-  margin-bottom: 12px;
+
+.filter-chip input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--accent);
+  flex-shrink: 0;
 }
-.section-title {
-  margin: 0 0 6px 0;
+
+.filter-chip span {
+  pointer-events: none;
+  line-height: 1;
+}
+
+.filter-chip:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.filter-chip[data-bookmaker="tipsport"]:has(input:checked) {
+  border-color: var(--tipsport);
+  color: var(--tipsport);
+  background: var(--tipsport-subtle);
+}
+.filter-chip[data-bookmaker="betano"]:has(input:checked) {
+  border-color: var(--betano);
+  color: var(--betano);
+  background: var(--betano-subtle);
+}
+.filter-chip[data-bookmaker="fortuna"]:has(input:checked) {
+  border-color: var(--fortuna);
+  color: var(--fortuna);
+  background: var(--fortuna-subtle);
+}
+
+/* ─── Obsah: dvě kolony ──────────────────────────────────── */
+.content {
+  min-height: 60px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  align-items: start;
+}
+
+.column-active,
+.column-upcoming {
+  min-width: 0;
+}
+
+.column-upcoming {
+  border-left: 1px solid var(--border);
+  padding-left: 8px;
+}
+
+/* ─── Error ───────────────────────────────────────────────── */
+.error {
+  color: var(--error);
   font-size: 0.8rem;
-  font-weight: 600;
-  color: #7aa2f7;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  background: var(--error-subtle);
+  border: 1px solid var(--error);
+  border-radius: var(--radius-sm);
+  line-height: 1.4;
+}
+
+/* ─── Sekce ────────────────────────────────────────────────── */
+.section {
+  margin-bottom: 8px;
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 4px 0;
+  font-size: 0.68rem;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  color: var(--text-secondary);
 }
+
+.section-title::before {
+  content: "";
+  width: 3px;
+  height: 10px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+#sectionLive .section-title::before {
+  background: var(--live);
+  box-shadow: 0 0 8px var(--live-pulse);
+}
+
 .section-hint {
-  margin: 0 0 6px 0;
-  font-size: 0.7rem;
-  color: #a9b1d6;
+  margin: 0 0 4px 0;
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  line-height: 1.3;
 }
+
 .ticket-list {
   list-style: none;
   margin: 0;
   padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
+
+/* ─── Karta tiketu: border barva sázkovky, bez tagu ────────── */
 .ticket-item {
   padding: 8px 10px;
-  margin-bottom: 4px;
-  background: #24283b;
-  border-radius: 8px;
-  border-left: 3px solid #3b4261;
+  background: var(--bg-card);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  border-left-width: 3px;
   cursor: pointer;
+  transition: background var(--transition), border-color var(--transition), transform 0.12s ease;
 }
+
+.ticket-item.tipsport:not(.live) { border-left-color: var(--tipsport); }
+.ticket-item.betano:not(.live) { border-left-color: var(--betano); }
+.ticket-item.fortuna:not(.live) { border-left-color: var(--fortuna); }
+.ticket-item:not(.tipsport):not(.betano):not(.fortuna):not(.live) { border-left-color: var(--accent); }
+
 .ticket-item:hover {
-  background: #2d3142;
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow);
 }
+
 .ticket-item.live {
-  border-left-color: #f7768e;
+  border-left-color: var(--live);
+  border-left-width: 3px;
+  background: linear-gradient(90deg, var(--live-subtle) 0%, var(--bg-card) 36px);
+  box-shadow: 0 0 0 1px rgba(248, 81, 73, 0.15);
 }
-.ticket-row-header {
-  margin-bottom: 4px;
-}
-.ticket-source {
-  font-size: 0.7rem;
-  color: #7aa2f7;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
+
 .ticket-match {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 0.74rem;
+  margin-bottom: 0;
+  padding-bottom: 6px;
+  color: var(--text);
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+}
+
+.ticket-divider {
+  height: 0;
+  border-bottom: 1px solid var(--border-divider);
+  margin: 0 0 6px 0;
+}
+
+/* Sázková příležitost – decentně zvýrazněný blok (typ sázky + výběr) */
+.ticket-bet-block {
+  font-size: 0.72rem;
+  line-height: 1.45;
+  margin-bottom: 4px;
+  padding: 5px 8px;
+  background: var(--bet-highlight-bg);
+  border-left: 2px solid var(--bet-highlight-border);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  color: var(--text-secondary);
+}
+
+.ticket-bet-label {
   font-weight: 600;
-  margin-bottom: 2px;
+  color: var(--text-key);
 }
-.ticket-meta {
-  font-size: 0.75rem;
-  color: #a9b1d6;
+
+.ticket-bet-sep {
+  color: var(--text-muted);
+  font-weight: 400;
 }
-.ticket-bet {
-  font-size: 0.8rem;
-  color: #7dcfff;
+
+.ticket-bet-selection {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.ticket-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   margin-top: 2px;
+  font-size: 0.7rem;
+  color: var(--text-muted);
 }
-.ticket-snapshot {
-  font-size: 0.75rem;
-  color: #9ece6a;
-  margin-top: 4px;
+
+.ticket-meta-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
+
+.ticket-meta-left span {
+  color: var(--text-key);
+}
+
+.ticket-meta-time {
+  margin-left: auto;
+  font-weight: 600;
+  color: var(--text-key);
+}
+
+.ticket-odds {
+  font-weight: 700;
+}
+
+/* ─── Loading ─────────────────────────────────────────────── */
 .loading {
   text-align: center;
-  padding: 16px;
-  color: #a9b1d6;
+  padding: 16px 12px 18px;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 10px;
 }
-.data-hint {
+
+.loading-message {
+  margin: 0 0 12px 0;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.loading-bar-wrap {
+  height: 6px;
+  background: var(--bg-card);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.loading-bar {
+  height: 100%;
+  width: 40%;
+  background: linear-gradient(90deg, var(--accent), #7c3aed);
+  border-radius: var(--radius-full);
+  animation: loading-bar 1.4s ease-in-out infinite;
+}
+
+@keyframes loading-bar {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(350%); }
+}
+
+.loading-hint {
+  margin: 0;
   font-size: 0.75rem;
-  color: #565f89;
-  margin: 12px 0 0;
-  padding: 8px 0;
+  color: var(--text-muted);
 }
-/* Tauri WebView2: pouze hlavička je tažitelná, modal musí přijímat kliky */
-.modal,
-.modal-backdrop,
-.modal-content {
+
+.loading.loading-done .loading-bar-wrap { display: none; }
+.loading.loading-done .loading-hint { display: none; }
+.loading.loading-done .loading-message { color: var(--success); }
+
+.data-hint {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-sm);
+  border: 1px dashed var(--border);
+  line-height: 1.45;
+}
+
+.data-hint strong { color: var(--text-secondary); }
+
+.last-refresh {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+/* ─── Modal nastavení (dark) ────────────────────────────────── */
+.modal, .modal-backdrop, .modal-content {
   -webkit-app-region: no-drag;
   app-region: no-drag;
 }
+
 .modal {
   position: fixed;
   inset: 0;
@@ -160,87 +491,180 @@ button:hover {
   align-items: center;
   justify-content: center;
   z-index: 100;
-  cursor: default;
+  padding: 16px;
 }
+
 .modal-backdrop {
   position: absolute;
   inset: 0;
   background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
   cursor: pointer;
 }
+
 .modal-content {
   position: relative;
   z-index: 1;
-  background: #24283b;
-  padding: 16px;
-  border-radius: 12px;
-  min-width: 280px;
+  background: var(--bg-elevated);
+  padding: 20px;
+  border-radius: var(--radius-lg);
+  min-width: 300px;
+  max-width: calc(100vw - 32px);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
   pointer-events: auto;
-  cursor: default;
 }
-.modal-content button {
-  cursor: pointer;
-}
+
 .modal-header-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
 }
+
 .modal-content h3 {
   margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text);
 }
+
 .modal-close-x {
   flex-shrink: 0;
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   padding: 0;
-  font-size: 24px;
+  font-size: 20px;
   line-height: 1;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  background: #3b4261;
-  color: #c0caf5;
-  border: none;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  transition: background var(--transition), color var(--transition);
+  font-family: inherit;
 }
+
 .modal-close-x:hover {
-  background: #565f89;
+  background: var(--bg-hover);
+  color: var(--text);
 }
-.modal-close-x {
-  text-decoration: none;
-  color: inherit;
-}
-.modal-hint {
-  margin: 8px 0 0;
-  font-size: 0.75rem;
-  color: #a9b1d6;
-}
-.modal-hint kbd {
-  padding: 2px 6px;
-  background: #3b4261;
-  border-radius: 4px;
-}
+
 .modal-content label {
   display: block;
   margin-bottom: 10px;
-  font-size: 0.85rem;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
 }
-.modal-content input {
+
+.modal-content input[type="text"],
+.modal-content input[type="number"] {
   display: block;
   width: 100%;
   margin-top: 4px;
-  padding: 6px 8px;
-  background: #1a1b26;
-  border: 1px solid #3b4261;
-  border-radius: 6px;
-  color: #c0caf5;
+  padding: 8px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 0.9rem;
+  font-family: inherit;
 }
+
+.modal-content input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-subtle);
+}
+
+.slider-label { margin-bottom: 4px; }
+.opacity-slider {
+  display: block;
+  width: 100%;
+  margin-bottom: 14px;
+  accent-color: var(--accent);
+}
+.modal-hint {
+  margin: 10px 0 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.modal-hint kbd {
+  padding: 3px 6px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-family: inherit;
+}
+
 .modal-actions {
-  margin-top: 16px;
+  margin-top: 18px;
   display: flex;
-  gap: 8px;
+  gap: 10px;
+}
+
+.modal-actions button {
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background var(--transition), transform 0.1s;
+}
+
+.modal-actions button:active { transform: scale(0.98); }
+
+#btnSaveSettings {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+}
+
+#btnSaveSettings:hover { background: var(--accent-hover); }
+
+#btnCloseSettings {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+
+#btnCloseSettings:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+/* ─── Volitelné téma: elegant (na <div id="app" data-theme="elegant">) ─── */
+#app[data-theme="elegant"] {
+  --bg: #111318;
+  --bg-elevated: #181c24;
+  --bg-card: #1e232d;
+  --bg-hover: #262c38;
+  --border: #2e3544;
+  --border-strong: #3e4758;
+  --border-divider: #2a3040;
+  --text: #e8ecf2;
+  --text-secondary: #a8b2c4;
+  --text-muted: #6c7690;
+  --text-key: #c2cce0;
+  --accent: #6366f1;
+  --accent-hover: #818cf8;
+  --accent-subtle: rgba(99, 102, 241, 0.1);
+  --live: #ef4444;
+  --live-subtle: rgba(239, 68, 68, 0.12);
+  --bet-highlight-bg: rgba(99, 102, 241, 0.06);
+  --bet-highlight-border: rgba(99, 102, 241, 0.22);
+  --tipsport: #6366f1;
+  --tipsport-subtle: rgba(99, 102, 241, 0.15);
+  --betano: #eab308;
+  --betano-subtle: rgba(234, 179, 8, 0.15);
+  --fortuna: #f97316;
+  --fortuna-subtle: rgba(249, 115, 22, 0.15);
 }

@@ -126,11 +126,19 @@ class Ticket(Base):
     source = Column(Enum(TicketSource), default=TicketSource.manual, nullable=False)
     ocr_image_path = Column(String(500), nullable=True)
 
+    # Odkaz na tiket u sázkové kanceláře (Tipsport/Betano/Fortuna)
+    bookmaker_ticket_url = Column(String(1000), nullable=True)
+
     # Live tracking (LIVE feature)
     live_match_url = Column(String(500), nullable=True)
     tipsport_match_id = Column(String(50), nullable=True)
     last_live_at = Column(DateTime, nullable=True)
     last_live_snapshot = Column(JSON, nullable=True)
+
+    # Import: pořadí z sázkovky + označení nově naimportovaných
+    import_batch_id = Column(String(64), nullable=True)   # ID dávky (např. timestamp)
+    import_batch_index = Column(Integer, nullable=True)   # Pořadí v dávce (0, 1, 2, …)
+    is_newly_imported = Column(Boolean, default=False, nullable=False)
 
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)

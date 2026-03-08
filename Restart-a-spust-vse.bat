@@ -10,12 +10,12 @@ echo.
 REM ─── KROK 0: Zastavit predchozi procesy ────────────
 echo [0/6] Zastavuji predchozi procesy...
 
-for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr ":3000.*LISTENING"') do (
-    echo   Kill PID %%a (port 3000^)
+for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr ":3001.*LISTENING"') do (
+    echo   Kill PID %%a (port 3001^)
     taskkill /PID %%a /F /T >nul 2>&1
 )
-for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr ":8000.*LISTENING"') do (
-    echo   Kill PID %%a (port 8000^)
+for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr ":15555.*LISTENING"') do (
+    echo   Kill PID %%a (port 15555^)
     taskkill /PID %%a /F /T >nul 2>&1
 )
 
@@ -86,14 +86,14 @@ echo.
 
 REM ─── KROK 4: Backend ──────────────────────────────
 echo [4/6] Spoustim Backend...
-start "BetTracker Backend" cmd /k "cd /d %~dp0backend && .\venv\Scripts\activate.bat && python -m uvicorn app.main:app --reload --port 8000"
-echo   Backend: http://localhost:8000
+start "BetTracker Backend" cmd /k "cd /d %~dp0backend && \"%~dp0backend\venv\Scripts\python.exe\" -m uvicorn app.main:app --reload --port 15555"
+echo   Backend: http://localhost:15555
 echo.
 
 REM ─── KROK 5: Frontend ─────────────────────────────
 echo [5/6] Spoustim Frontend...
 start "BetTracker Frontend" cmd /k "cd /d %~dp0frontend && npm run dev"
-echo   Frontend: http://localhost:3000
+echo   Frontend: http://localhost:3001
 echo.
 
 REM ─── KROK 6: Overlay (Tauri dev) ───────────────────
@@ -106,8 +106,8 @@ echo ==========================================
 echo   VSECHNO SPUSTENO PRO TEST
 echo.
 echo   Frontend:  http://localhost:3000
-echo   Backend:   http://localhost:8000
-echo   API docs:  http://localhost:8000/docs
+echo   Backend:   http://localhost:15555
+echo   API docs:  http://localhost:15555/docs
 echo   Overlay:   okno Tauri (dev)
 echo ==========================================
 echo.

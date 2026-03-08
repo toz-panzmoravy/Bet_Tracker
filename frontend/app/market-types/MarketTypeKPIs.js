@@ -47,12 +47,12 @@ export default function MarketTypeKPIs({ marketTypes }) {
                 <div key={i} className={`kpi-card ${stat.color}`}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                         <div>
-                            <p style={{ margin: 0, fontSize: "0.75rem", fontWeight: 600, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                            <p style={{ margin: 0, fontSize: "0.75rem", fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                                 {stat.label}
                             </p>
-                            <h3 style={{ margin: "8px 0 4px 0", fontSize: "1.25rem", fontWeight: 700 }}>{stat.value}</h3>
+                            <h3 className="section-title" style={{ margin: "8px 0 4px 0", fontSize: "1.25rem" }}>{stat.value}</h3>
                             {stat.subValue && (
-                                <p style={{ margin: 0, fontSize: "0.85rem", color: stat.color === 'green' ? 'var(--color-green)' : 'var(--color-text-muted)', fontWeight: 500 }}>
+                                <p style={{ margin: 0, fontSize: "0.85rem", color: stat.color === 'green' ? 'var(--success)' : 'var(--text-muted)', fontWeight: 500 }}>
                                     {stat.subValue}
                                 </p>
                             )}

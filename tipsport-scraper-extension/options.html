@@ -27,6 +27,11 @@
 <body>
   <h1>Nastavení BetTracker</h1>
   <div class="option">
+    <label for="api-url">URL API (backend)</label>
+    <input type="text" id="api-url" placeholder="http://127.0.0.1:15555/api" style="width:100%;padding:8px 12px;border:1px solid #cbd5e1;border-radius:6px;font-size:14px;box-sizing:border-box;" />
+    <p class="hint">Backend musí běžet na portu 15555 (BetTracker.bat nebo run-backend.bat). Zadejte přesně: <strong>http://127.0.0.1:15555/api</strong> nebo <strong>http://localhost:15555/api</strong>. Rozšíření při chybě zkusí druhou adresu automaticky.</p>
+  </div>
+  <div class="option">
     <label for="upcoming-visibility">Tlačítko Upcoming zobrazit</label>
     <select id="upcoming-visibility">
       <option value="tipsport_betano_only">Jen na Tipsport a Betano</option>

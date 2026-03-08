@@ -115,10 +115,10 @@ export default function MarketTypesPage() {
         <div className="container" style={{ maxWidth: 1100, margin: "0 auto", padding: "1rem" }}>
             <header style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "2.5rem" }}>
                 <div>
-                    <h1 style={{ fontSize: "1.85rem", fontWeight: 800, marginBottom: "0.5rem", letterSpacing: "-0.02em" }}>
+                    <h1 className="page-title" style={{ fontSize: "1.85rem", marginBottom: "0.5rem" }}>
                         🧩 Typy sázek
                     </h1>
-                    <p style={{ color: "var(--color-text-secondary)", fontSize: "0.95rem" }}>
+                    <p className="section-subtitle" style={{ fontSize: "0.95rem" }}>
                         Správa kategorií sázek a jejich výkonnostní metriky
                     </p>
                 </div>
@@ -137,7 +137,7 @@ export default function MarketTypesPage() {
 
             <div className="glass-card" style={{ padding: "1.5rem", marginBottom: "1.5rem" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
-                    <h2 style={{ fontSize: "1.1rem", fontWeight: 700, margin: 0 }}>📋 Seznam kategorií</h2>
+                    <h2 className="section-title" style={{ fontSize: "1.1rem", margin: 0 }}>📋 Seznam kategorií</h2>
                     <div style={{ position: "relative", width: "300px" }}>
                         <input
                             className="input"
@@ -167,7 +167,7 @@ export default function MarketTypesPage() {
                                     <td>
                                         <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 4 }}>
                                             {mt.sports && mt.sports.map(s => (
-                                                <span key={s.id} title={s.name} style={{ fontSize: "0.8rem", background: "rgba(255,255,255,0.05)", padding: "2px 4px", borderRadius: "4px" }}>
+                                                <span key={s.id} title={s.name} style={{ fontSize: "0.8rem", background: "var(--surface-subtle)", padding: "2px 4px", borderRadius: "4px" }}>
                                                     {s.icon}
                                                 </span>
                                             ))}
@@ -178,13 +178,13 @@ export default function MarketTypesPage() {
                                         </div>
                                     </td>
                                     <td style={{ textAlign: "center" }}>
-                                        <span className="badge" style={{ background: "rgba(255,255,255,0.05)", color: "var(--color-text-secondary)" }}>
+                                        <span className="badge" style={{ background: "var(--surface-subtle)", color: "var(--color-text-secondary)" }}>
                                             {mt.bets_count}
                                         </span>
                                     </td>
                                     <td>
                                         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                                            <div style={{ flex: 1, height: "6px", background: "rgba(255,255,255,0.05)", borderRadius: "10px", overflow: "hidden" }}>
+                                            <div style={{ flex: 1, height: "6px", background: "var(--surface-subtle)", borderRadius: "10px", overflow: "hidden" }}>
                                                 <div style={{
                                                     width: `${mt.win_rate}%`,
                                                     height: "100%",

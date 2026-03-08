@@ -93,6 +93,11 @@ class TicketCreate(BaseModel):
     ticket_type: str = "solo"
     is_live: bool = False
     source: str = "manual"
+    bookmaker_ticket_url: Optional[str] = None
+    ocr_image_path: Optional[str] = None
+    import_batch_id: Optional[str] = None
+    import_batch_index: Optional[int] = None
+    is_newly_imported: bool = False
 
 
 class TicketUpdate(BaseModel):
@@ -113,6 +118,10 @@ class TicketUpdate(BaseModel):
     status: Optional[TicketStatusLiteral] = None
     ticket_type: Optional[str] = None
     is_live: Optional[bool] = None
+    bookmaker_ticket_url: Optional[str] = None
+    is_newly_imported: Optional[bool] = None
+    import_batch_id: Optional[str] = None
+    import_batch_index: Optional[int] = None
 
 
 class TicketOut(BaseModel):
@@ -137,6 +146,10 @@ class TicketOut(BaseModel):
     source: str
     created_at: Optional[datetime] = None
     settled_at: Optional[datetime] = None
+    bookmaker_ticket_url: Optional[str] = None
+    import_batch_id: Optional[str] = None
+    import_batch_index: Optional[int] = None
+    is_newly_imported: bool = False
     live_match_url: Optional[str] = None
     tipsport_match_id: Optional[str] = None
     last_live_at: Optional[datetime] = None
@@ -157,6 +170,16 @@ class TicketListResponse(BaseModel):
     """Paginated list of tickets with total count."""
     items: List[TicketOut]
     total: int
+
+
+class SofaScoreEventOut(BaseModel):
+    """Jeden zápas pro sync do SofaScore Favourites (live nebo upcoming)."""
+    home_team: str
+    away_team: str
+    event_date: Optional[str] = None  # ISO datetime string
+    sport: str
+    league: Optional[str] = None
+    is_live: bool = False
 
 
 # ─── Stats ───────────────────────────────────────────────
@@ -301,6 +324,7 @@ class TipsportScrapeTicketIn(BaseModel):
     placed_at: Optional[datetime] = None       # datum/čas podaní tiketu, pokud ho scrapper umí vytáhnout
     event_start_at: Optional[datetime] = None   # čas výkopu / začátku zápasu (z detailu tiketu); přednost před placed_at pro event_date
     is_live: Optional[bool] = False            # True pokud tiket obsahuje Live (běžící zápas)
+    ticket_href: Optional[str] = None          # URL tiketu na Tipsportu (pro odkaz v overlay)
     legs: Optional[List["TipsportScrapeLegIn"]] = None  # AKU: nohy (zápasy), pokud extension načte rozbalený tiket
 
 
@@ -318,6 +342,7 @@ TipsportScrapeTicketIn.model_rebuild()
 
 class TipsportScrapeRequest(BaseModel):
     tickets: List[TipsportScrapeTicketIn]
+    overlay_sync: Optional[bool] = False  # True = sync pro overlay, při update neměnit status na won/lost
 
 
 class TipsportScrapeResultItem(BaseModel):
@@ -398,6 +423,7 @@ class BetanoScrapeTicketIn(BaseModel):
 
 class BetanoScrapeRequest(BaseModel):
     tickets: List[BetanoScrapeTicketIn]
+    overlay_sync: Optional[bool] = False  # True = sync pro overlay, při update neměnit status na won/lost
 
 
 class BetanoScrapeResultItem(BaseModel):
@@ -441,10 +467,12 @@ class FortunaScrapeTicketIn(BaseModel):
     placed_at: Optional[datetime] = None
     event_start_at: Optional[datetime] = None   # čas výkopu; přednost před placed_at pro event_date
     is_live: Optional[bool] = False
+    sport_icon_id: Optional[str] = None        # kód z ikony po rozkliknutí, např. "07" (ufo-sprt-07.png = Ragby)
 
 
 class FortunaScrapeRequest(BaseModel):
     tickets: List[FortunaScrapeTicketIn]
+    overlay_sync: Optional[bool] = False  # True = sync pro overlay, při update neměnit status na won/lost
 
 
 class FortunaScrapeResultItem(BaseModel):
@@ -519,6 +547,15 @@ class AnalyticsTrendPoint(BaseModel):
     bets_count: int = 0
 
 
+class AnalyticsWeeklyPoint(BaseModel):
+    """Agregace za jeden týden (ISO týden) – vývoj v čase."""
+    week_label: str  # např. "2025-W10" nebo "Týden 10.3."
+    profit: Decimal = Decimal("0")
+    roi_percent: float = 0.0
+    hitrate_percent: float = 0.0
+    bets_count: int = 0
+
+
 class AnalyticsDayItem(BaseModel):
     """Agregace podle dne v týdnu (0=pondělí … 6=neděle)."""
     day_of_week: int
@@ -540,6 +577,7 @@ class AnalyticsSummary(BaseModel):
     by_market: List[AnalyticsMarketItem] = []
     by_day_of_week: List[AnalyticsDayItem] = []
     profit_trend: List[AnalyticsTrendPoint] = []
+    weekly_trend: List[AnalyticsWeeklyPoint] = []
 
 
 # ─── Live tracking ───────────────────────────────────────

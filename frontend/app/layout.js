@@ -2,6 +2,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ToastProvider } from "./components/Toast";
+import { ClipboardPromptButton } from "./components/ClipboardPromptButton";
+import { ThemeProvider, useTheme } from "./context/ThemeContext";
 import "./globals.css";
 
 const NAV_ITEMS = [
@@ -15,47 +17,33 @@ const NAV_ITEMS = [
   { href: "/nastaveni", label: "Nastavení", icon: "⚙️" },
 ];
 
+function ThemeSwitcher() {
+  const { theme, toggleTheme } = useTheme();
+  return (
+    <button
+      type="button"
+      onClick={toggleTheme}
+      className="theme-switcher"
+      title={theme === "dark" ? "Světlý motiv" : "Tmavý motiv"}
+      aria-label={theme === "dark" ? "Přepnout na světlý motiv" : "Přepnout na tmavý motiv"}
+    >
+      {theme === "dark" ? "☀️" : "🌙"}
+    </button>
+  );
+}
+
 function Sidebar() {
   const pathname = usePathname();
   return (
-    <aside
-      className="app-sidebar"
-      style={{
-        width: 240,
-        minHeight: "100vh",
-        background: "var(--color-bg-secondary)",
-        borderRight: "1px solid var(--color-border)",
-        padding: "1.5rem 1rem",
-        display: "flex",
-        flexDirection: "column",
-        position: "fixed",
-        top: 0,
-        left: 0,
-        zIndex: 30,
-      }}
-    >
-      {/* Logo */}
-      <div className="sidebar-logo" style={{ padding: "0 0.5rem", marginBottom: "2rem" }}>
-        <div
-          role="banner"
-          style={{
-            fontSize: "1.25rem",
-            fontWeight: 700,
-            background: "linear-gradient(135deg, #6366f1, #a78bfa)",
-            WebkitBackgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-            letterSpacing: "-0.02em",
-          }}
-        >
+    <aside className="app-sidebar" role="navigation" aria-label="Hlavní menu">
+      <div className="sidebar-logo">
+        <div role="banner" className="sidebar-logo-text">
           🎯 BetTracker
         </div>
-        <p className="sidebar-label" style={{ fontSize: "0.7rem", color: "var(--color-text-muted)", marginTop: 4 }}>
-          Osobní sázkový tracker
-        </p>
+        <p className="sidebar-label">Osobní sázkový tracker</p>
       </div>
 
-      {/* Nav */}
-      <nav style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      <nav style={{ display: "flex", flexDirection: "column", gap: 2 }} aria-label="Stránky">
         {NAV_ITEMS.map((item) => {
           const isActive = pathname === item.href;
           return (
@@ -64,38 +52,54 @@ function Sidebar() {
               href={item.href}
               className={`nav-link ${isActive ? "active" : ""}`}
               title={item.label}
+              aria-current={isActive ? "page" : undefined}
             >
-              <span>{item.icon}</span>
+              <span aria-hidden>{item.icon}</span>
               <span className="sidebar-label">{item.label}</span>
             </Link>
           );
         })}
       </nav>
 
-      {/* Footer */}
-      <div className="sidebar-footer" style={{ marginTop: "auto", padding: "0.5rem", fontSize: "0.7rem", color: "var(--color-text-muted)" }}>
-        <span className="sidebar-label">v1.0.0 • Lokální režim</span>
+      <div className="sidebar-footer">
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <ThemeSwitcher />
+          <span className="sidebar-label">v1.0.0 • Lokální</span>
+        </div>
       </div>
     </aside>
   );
 }
 
+function ThemeScript() {
+  return (
+    <script
+      dangerouslySetInnerHTML={{
+        __html: `(function(){var t=localStorage.getItem("bettracker-theme");if(!t&&typeof window.matchMedia!="undefined"){t=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"}if(t)document.documentElement.setAttribute("data-theme",t)})();`,
+      }}
+    />
+  );
+}
+
 export default function RootLayout({ children }) {
   return (
-    <html lang="cs">
+    <html lang="cs" data-theme="dark" suppressHydrationWarning>
       <head>
+        <ThemeScript />
         <title>BetTracker – Osobní sázkový tracker</title>
         <meta name="description" content="Osobní systém pro sledování sportovních sázek s AI analýzou" />
       </head>
       <body>
-        <ToastProvider>
-          <Sidebar />
-          <main className="app-main" style={{ marginLeft: 240, minHeight: "100vh", padding: "2rem" }}>
-            {children}
-          </main>
-        </ToastProvider>
+        <ThemeProvider>
+          <ToastProvider>
+            <Sidebar />
+            <main className="app-main">
+              {children}
+            </main>
+            <ClipboardPromptButton />
+          </ToastProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
 }
-

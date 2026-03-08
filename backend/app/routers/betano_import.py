@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import timedelta, datetime
 from decimal import Decimal
 from typing import List
 
@@ -21,6 +21,7 @@ from app.schemas import (
 from app.routers.tickets import create_ticket as _create_ticket
 from app.routers.tickets import update_ticket as _update_ticket
 from app.preview_store import create_preview_id, set_preview
+from app.utils.sport_mapping import betano_icon_to_label, normalize_sport_label_for_db
 
 
 router = APIRouter(prefix="/api/import/betano", tags=["Import – Betano"])
@@ -40,10 +41,11 @@ def _get_betano_bookmaker_id(db: Session) -> int:
 
 
 def _map_sport_label_to_id(db: Session, label: str | None) -> int:
-    """Převede textový název sportu z Betano na sport_id v DB."""
+    """Převede textový název sportu z Betano na sport_id v DB (včetně aliasů z Ticket_Mapping)."""
     if not label:
         label = "Ostatní"
-    normalized = label.strip().lower()
+    name = normalize_sport_label_for_db(label.strip()) or label.strip()
+    normalized = name.lower()
 
     sport = (
         db.query(Sport)
@@ -56,6 +58,9 @@ def _map_sport_label_to_id(db: Session, label: str | None) -> int:
             "hokej": "Hokej",
             "basketbal": "Basketbal",
             "tenis": "Tenis",
+            "házená": "Handball",
+            "hazena": "Handball",
+            "esport": "Esport",
         }
         target = mapping.get(normalized)
         if target:
@@ -71,26 +76,8 @@ def _map_sport_label_to_id(db: Session, label: str | None) -> int:
 
 
 def _map_sport_icon_to_label(icon_id: str | None) -> str | None:
-    """
-    Hrubé mapování podle názvu ikonového souboru v Betano (ICEH = Hokej, BASK = Basketbal, TENN = Tenis).
-    """
-    if not icon_id:
-        return None
-    src = icon_id.lower()
-    # Mapování podle souborů z Betano_sports:
-    # /myaccount/web/img/ICEH...svg  -> Hokej
-    # /myaccount/web/img/BASK...svg  -> Basketbal
-    # /myaccount/web/img/TENN...svg  -> Tenis
-    # /myaccount/web/img/ESPS...svg  -> Esport (případně později rozšíříme i na Fotbal)
-    if "bask" in src:
-        return "Basketbal"
-    if "iceh" in src:
-        return "Hokej"
-    if "tenn" in src:
-        return "Tenis"
-    if "esps" in src:
-        return "Esport"
-    return None
+    """Mapování ikony Betano (BASK, ICEH, FOOT, HAND, TENN, ESPS – viz Ticket_Mapping) na název sportu v DB."""
+    return betano_icon_to_label(icon_id)
 
 
 def _map_status(raw: str | None, payout: Decimal | None) -> TicketStatus:
@@ -308,8 +295,11 @@ def import_from_scraper(
 ):
     """
     Import tiketů z Betano přes browser scraper.
+    overlay_sync=True: sync pro overlay – při update neměnit status na won/lost/void (zachovat open).
     """
     betano_bookmaker_id = _get_betano_bookmaker_id(db)
+    overlay_sync = getattr(payload, "overlay_sync", False) or False
+    import_batch_id = datetime.utcnow().strftime("%Y%m%d%H%M%S")
 
     results: List[BetanoScrapeResultItem] = []
     created_count = 0
@@ -320,10 +310,19 @@ def import_from_scraper(
     for idx, item in enumerate(payload.tickets):
         try:
             data = _build_ticket_create(db, betano_bookmaker_id, item)
+            data = data.model_copy(update={
+                "import_batch_id": import_batch_id,
+                "import_batch_index": idx,
+                "is_newly_imported": True,
+            })
 
             duplicate = _find_duplicate(db, betano_bookmaker_id, data, item.betano_key)
             if duplicate:
-                update_payload = {}
+                update_payload = {
+                    "import_batch_id": import_batch_id,
+                    "import_batch_index": idx,
+                    "is_newly_imported": True,
+                }
 
                 if duplicate.sport_id != data.sport_id:
                     update_payload["sport_id"] = data.sport_id
@@ -334,7 +333,8 @@ def import_from_scraper(
                 ):
                     update_payload["payout"] = data.payout
 
-                if (
+                # Při overlay_sync neměnit status na vyhráno/prohráno – jen přidat/aktualizovat pro zobrazení
+                if not overlay_sync and (
                     duplicate.status is None
                     or str(getattr(duplicate.status, "value", duplicate.status))
                     != data.status
@@ -361,31 +361,18 @@ def import_from_scraper(
                     if duplicate.ocr_image_path != ref:
                         update_payload["ocr_image_path"] = ref
 
-                if update_payload:
-                    updated = _update_ticket(
-                        ticket_id=duplicate.id,
-                        data=TicketUpdate(**update_payload),
-                        db=db,
-                    )
-                    updated_count += 1
-                    results.append(
-                        BetanoScrapeResultItem(
-                            index=idx,
-                            status="updated",
-                            ticket_id=updated.id,
-                            message=None,
-                        )
-                    )
-                else:
-                    skipped_count += 1
-                    results.append(
-                        BetanoScrapeResultItem(
-                            index=idx,
-                            status="skipped",
-                            ticket_id=duplicate.id,
-                            message="Tiket již existuje a je bez změny.",
-                        )
-                    )
+                updated = _update_ticket(
+                    ticket_id=duplicate.id,
+                    data=TicketUpdate(**update_payload),
+                    db=db,
+                )
+                updated_count += 1
+                results.append(BetanoScrapeResultItem(
+                    index=idx,
+                    status="updated",
+                    ticket_id=updated.id,
+                    message=None,
+                ))
                 continue
 
             created = _create_ticket(data=data, db=db)

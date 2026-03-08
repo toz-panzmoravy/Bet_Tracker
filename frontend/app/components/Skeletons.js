@@ -22,7 +22,7 @@ export function DashboardSkeleton() {
             </div>
 
             {/* Tab bar skeleton */}
-            <div style={{ display: "flex", gap: 4, background: "var(--color-bg-secondary)", borderRadius: 12, padding: 4, marginBottom: "1.25rem" }}>
+            <div style={{ display: "flex", gap: 4, background: "var(--bg-secondary)", borderRadius: 12, padding: 4, marginBottom: "1.25rem" }}>
                 {[...Array(3)].map((_, i) => (
                     <div key={i} className="skeleton-line" style={{ flex: 1, height: 40, borderRadius: 10 }} />
                 ))}

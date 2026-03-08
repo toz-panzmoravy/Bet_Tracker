@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import timedelta, datetime
 from decimal import Decimal
 from typing import List
 
@@ -27,6 +27,8 @@ router = APIRouter(prefix="/api/import/fortuna", tags=["Import – Fortuna"])
 
 _FORTUNA_KEY_PREFIX = "fortuna:"
 
+from app.utils.sport_mapping import fortuna_icon_to_label, normalize_sport_label_for_db
+
 
 def _get_fortuna_bookmaker_id(db: Session) -> int:
     """Najde ID sázkovky Fortuna (využívá seed; pokud chybí, vytvoří)."""
@@ -39,8 +41,28 @@ def _get_fortuna_bookmaker_id(db: Session) -> int:
     return fortuna.id
 
 
-def _map_sport_label_to_id(db: Session, _label: str | None) -> int:
-    """Fortuna z overview neposílá sport – vždy Ostatní, pokud nepřidáme detekci."""
+def _map_fortuna_sport_icon_to_label(icon_id: str | None) -> str | None:
+    """Převede kód ikony Fortuny (0i, 00, 0w, 07, 0y, 0x, 0m z Ticket_Mapping) na název sportu v DB."""
+    return fortuna_icon_to_label(icon_id)
+
+
+def _map_sport_label_to_id(db: Session, label: str | None) -> int:
+    """Převede název sportu (z mapování ikony nebo přímo) na sport_id. Neznámý → Ostatní."""
+    raw = (label or "").strip()
+    name = normalize_sport_label_for_db(raw) or raw
+    if name:
+        sport = db.query(Sport).filter(Sport.name.ilike(name)).first()
+        if sport:
+            return sport.id
+        normal = name.lower()
+        if normal in ("fotbal", "football", "soccer"):
+            sport = db.query(Sport).filter(Sport.name.ilike("%otbal%")).first()
+            if sport:
+                return sport.id
+        if normal in ("ragby", "rugby"):
+            sport = db.query(Sport).filter(Sport.name.ilike("%agby%")).first()
+            if sport:
+                return sport.id
     sport = db.query(Sport).filter(Sport.name == "Ostatní").first()
     if not sport:
         sport = Sport(name="Ostatní", icon="🏆")
@@ -92,7 +114,8 @@ def _build_ticket_create(
     item: FortunaScrapeTicketIn,
 ) -> TicketCreate:
     """Namapuje jeden Fortuna tiket na TicketCreate."""
-    sport_id = _map_sport_label_to_id(db, None)
+    sport_label = _map_fortuna_sport_icon_to_label(getattr(item, "sport_icon_id", None))
+    sport_id = _map_sport_label_to_id(db, sport_label)
     market_label, selection = _normalize_market_and_selection(
         item.market_label_raw, item.selection_raw
     )
@@ -239,8 +262,10 @@ def import_from_scraper(
     payload: FortunaScrapeRequest,
     db: Session = Depends(get_db),
 ):
-    """Import tiketů z Fortuny (ifortuna.cz) přes browser scraper."""
+    """Import tiketů z Fortuny (ifortuna.cz) přes browser scraper. overlay_sync=True: při update neměnit status."""
     fortuna_bookmaker_id = _get_fortuna_bookmaker_id(db)
+    overlay_sync = getattr(payload, "overlay_sync", False) or False
+    import_batch_id = datetime.utcnow().strftime("%Y%m%d%H%M%S")
 
     results: List[FortunaScrapeResultItem] = []
     created_count = 0
@@ -251,15 +276,24 @@ def import_from_scraper(
     for idx, item in enumerate(payload.tickets):
         try:
             data = _build_ticket_create(db, fortuna_bookmaker_id, item)
+            data = data.model_copy(update={
+                "import_batch_id": import_batch_id,
+                "import_batch_index": idx,
+                "is_newly_imported": True,
+            })
 
             duplicate = _find_duplicate(db, fortuna_bookmaker_id, data, item.fortuna_key)
             if duplicate:
-                update_payload = {}
+                update_payload = {
+                    "import_batch_id": import_batch_id,
+                    "import_batch_index": idx,
+                    "is_newly_imported": True,
+                }
                 if data.payout is not None and (
                     duplicate.payout is None or Decimal(duplicate.payout) != Decimal(data.payout)
                 ):
                     update_payload["payout"] = data.payout
-                if (
+                if not overlay_sync and (
                     duplicate.status is None
                     or str(getattr(duplicate.status, "value", duplicate.status)) != data.status
                 ):
@@ -280,31 +314,18 @@ def import_from_scraper(
                     if duplicate.ocr_image_path != ref:
                         update_payload["ocr_image_path"] = ref
 
-                if update_payload:
-                    updated = _update_ticket(
-                        ticket_id=duplicate.id,
-                        data=TicketUpdate(**update_payload),
-                        db=db,
-                    )
-                    updated_count += 1
-                    results.append(
-                        FortunaScrapeResultItem(
-                            index=idx,
-                            status="updated",
-                            ticket_id=updated.id,
-                            message=None,
-                        )
-                    )
-                else:
-                    skipped_count += 1
-                    results.append(
-                        FortunaScrapeResultItem(
-                            index=idx,
-                            status="skipped",
-                            ticket_id=duplicate.id,
-                            message="Tiket již existuje a je bez změny.",
-                        )
-                    )
+                updated = _update_ticket(
+                    ticket_id=duplicate.id,
+                    data=TicketUpdate(**update_payload),
+                    db=db,
+                )
+                updated_count += 1
+                results.append(FortunaScrapeResultItem(
+                    index=idx,
+                    status="updated",
+                    ticket_id=updated.id,
+                    message=None,
+                ))
                 continue
 
             created = _create_ticket(data=data, db=db)

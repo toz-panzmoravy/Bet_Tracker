@@ -9,15 +9,15 @@ echo.
 REM ─── KROK 0: Uklidime predchozi procesy ────────────
 echo [0/5] Zastavuji predchozi procesy...
 
-REM Kill procesy na portu 3000 (frontend)
-for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr ":3000.*LISTENING"') do (
-    echo   Kill PID %%a (port 3000^)
+REM Kill procesy na portu 3001 (frontend)
+for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr ":3001.*LISTENING"') do (
+    echo   Kill PID %%a (port 3001^)
     taskkill /PID %%a /F /T >nul 2>&1
 )
 
-REM Kill procesy na portu 8000 (backend)
-for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr ":8000.*LISTENING"') do (
-    echo   Kill PID %%a (port 8000^)
+REM Kill procesy na portu 15555 (backend)
+for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr ":15555.*LISTENING"') do (
+    echo   Kill PID %%a (port 15555^)
     taskkill /PID %%a /F /T >nul 2>&1
 )
 
@@ -37,7 +37,7 @@ if exist "%~dp0frontend\.next\dev\lock" (
     rmdir /s /q "%~dp0frontend\.next" >nul 2>&1
 )
 
-echo   Porty 3000 a 8000 uvolneny.
+echo   Porty 3001 a 15555 uvolneny.
 echo.
 
 REM ─── KROK 1: Docker / PostgreSQL ──────────────────
@@ -118,22 +118,22 @@ echo.
 
 REM ─── KROK 4: Backend ──────────────────────────────
 echo [4/5] Spoustim Backend (FastAPI)...
-start "BetTracker Backend" cmd /k "cd /d %~dp0backend && .\venv\Scripts\activate.bat && python -m uvicorn app.main:app --reload --port 8000"
-echo   Backend: http://localhost:8000
+start "BetTracker Backend" cmd /k "cd /d %~dp0backend && \"%~dp0backend\venv\Scripts\python.exe\" -m uvicorn app.main:app --reload --port 15555"
+echo   Backend: http://localhost:15555
 echo.
 
 REM ─── KROK 5: Frontend ─────────────────────────────
 echo [5/5] Spoustim Frontend (Next.js)...
 start "BetTracker Frontend" cmd /k "cd /d %~dp0frontend && npm run dev"
-echo   Frontend: http://localhost:3000
+echo   Frontend: http://localhost:3001
 echo.
 
 echo ==========================================
 echo   VSECHNY SLUZBY SPUSTENY!
 echo.
-echo   Frontend: http://localhost:3000
-echo   Backend:  http://localhost:8000
-echo   API docs: http://localhost:8000/docs
+echo   Frontend: http://localhost:3001
+echo   Backend:  http://localhost:15555
+echo   API docs: http://localhost:15555/docs
 echo ==========================================
 echo.
 echo Data v databazi jsou ZACHOVANA mezi restarty.

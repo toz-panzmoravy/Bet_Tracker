@@ -41,10 +41,10 @@ export default function ConfirmModal({
         onClick={(e) => e.stopPropagation()}
         style={{ maxWidth: 400 }}
       >
-        <h3 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: 8 }}>
+        <h3 className="card-title" style={{ fontSize: "1.1rem", marginBottom: 8 }}>
           {title}
         </h3>
-        <p style={{ color: "var(--color-text-secondary)", fontSize: "0.9rem", marginBottom: 20 }}>
+        <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem", marginBottom: 20 }}>
           {message}
         </p>
         <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
@@ -53,16 +53,7 @@ export default function ConfirmModal({
           </button>
           <button
             type="button"
-            className={isDanger ? "btn" : "btn btn-primary"}
-            style={
-              isDanger
-                ? {
-                    background: "linear-gradient(135deg, #ef4444, #dc2626)",
-                    color: "#fff",
-                    border: "none",
-                  }
-                : {}
-            }
+            className={isDanger ? "btn btn-danger-solid" : "btn btn-primary"}
             onClick={() => onConfirm?.()}
           >
             {confirmLabel}

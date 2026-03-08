@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import timedelta, datetime
 from decimal import Decimal
 from typing import List
 
@@ -23,6 +23,7 @@ from app.schemas import (
 from app.routers.tickets import create_ticket as _create_ticket
 from app.routers.tickets import update_ticket as _update_ticket
 from app.preview_store import create_preview_id, set_preview
+from app.utils.sport_mapping import normalize_sport_label_for_db
 
 
 router = APIRouter(prefix="/api/import/tipsport", tags=["Import – Tipsport"])
@@ -43,10 +44,11 @@ def _get_tipsport_bookmaker_id(db: Session) -> int:
 
 
 def _map_sport_label_to_id(db: Session, label: str | None) -> int:
-    """Převede textový název sportu z Tipsportu na sport_id v DB."""
+    """Převede textový název sportu z Tipsportu na sport_id v DB (včetně aliasů z Ticket_Mapping)."""
     if not label:
         label = "Ostatní"
-    normalized = label.strip().lower()
+    name = normalize_sport_label_for_db(label.strip()) or label.strip()
+    normalized = name.lower()
 
     # Zkus přesný název (case-insensitive)
     sport = (
@@ -55,7 +57,7 @@ def _map_sport_label_to_id(db: Session, label: str | None) -> int:
         .first()
     )
     if not sport:
-        # Jednoduché mapování běžných variant
+        # Mapování běžných variant (Tipsport, Betano, Fortuna mohou používat různé názvy)
         mapping = {
             "fotbal": "Fotbal",
             "soccer": "Fotbal",
@@ -64,6 +66,10 @@ def _map_sport_label_to_id(db: Session, label: str | None) -> int:
             "basketbal": "Basketbal",
             "basketball": "Basketbal",
             "esport": "Esport",
+            "házená": "Handball",
+            "hazena": "Handball",
+            "volejbal": "Volejbal",
+            "ragby": "Rugby",
         }
         target = mapping.get(normalized)
         if target:
@@ -94,7 +100,7 @@ def _map_status(raw: str | None, payout: Decimal | None) -> TicketStatus:
             return TicketStatus.lost
         if "#i172" in val or "i172" in val:
             return TicketStatus.open
-        if any(x in val for x in ("void", "vrácen", "vraceno", "vráceno", "zrušen", "zrusen", "refund")):
+        if any(x in val for x in ("void", "vrácen", "vraceno", "vráceno", "zrušen", "zrusen", "refund", "ignored", "dropped")):
             return TicketStatus.void
         if any(x in val for x in ("open", "čeká", "ceka", "pending", "nezúčt", "nevyhod")):
             return TicketStatus.open
@@ -219,6 +225,13 @@ def _build_ticket_create(
         away_team = item.away_team.strip()
 
     event_date = getattr(item, "event_start_at", None) or item.placed_at
+    ticket_href = getattr(item, "ticket_href", None) or None
+    if ticket_href and isinstance(ticket_href, str) and ticket_href.strip():
+        ticket_href = ticket_href.strip()
+        if ticket_href.startswith("/"):
+            ticket_href = "https://www.tipsport.cz" + ticket_href
+    else:
+        ticket_href = None
     return TicketCreate(
         bookmaker_id=tipsport_bookmaker_id,
         sport_id=sport_id,
@@ -238,6 +251,7 @@ def _build_ticket_create(
         ticket_type=ticket_type,
         is_live=bool(is_live),
         source="manual",
+        bookmaker_ticket_url=ticket_href,
     )
 
 
@@ -405,17 +419,19 @@ def _build_duplicate_update_payload(
     duplicate: Ticket,
     data: TicketCreate,
     item: TipsportScrapeTicketIn,
+    overlay_sync: bool = False,
 ) -> dict:
     """
     Připraví payload pro synchronizaci existujícího tiketu s aktuálními daty z Tipsportu.
-    Sdílená logika pro /scrape i /scrape/preview.
+    overlay_sync=True: při syncu pro overlay neměnit status (zachovat open).
     """
     update_payload: dict = {}
 
-    # status: přepsat z Tipsportu (Tipsport má vždy pravdu)
-    dup_status = str(getattr(duplicate.status, "value", duplicate.status))
-    if dup_status != data.status:
-        update_payload["status"] = data.status
+    # status: přepsat z Tipsportu (Tipsport má vždy pravdu); při overlay_sync neměnit
+    if not overlay_sync:
+        dup_status = str(getattr(duplicate.status, "value", duplicate.status))
+        if dup_status != data.status:
+            update_payload["status"] = data.status
 
     # sport: opravovat při změně
     if duplicate.sport_id != data.sport_id:
@@ -459,6 +475,15 @@ def _build_duplicate_update_payload(
         if duplicate.ocr_image_path != ref:
             update_payload["ocr_image_path"] = ref
 
+    # odkaz na tiket u Tipsportu (pro overlay)
+    ticket_href = getattr(item, "ticket_href", None) or None
+    if ticket_href and isinstance(ticket_href, str) and ticket_href.strip():
+        u = ticket_href.strip()
+        if u.startswith("/"):
+            u = "https://www.tipsport.cz" + u
+        if duplicate.bookmaker_ticket_url != u:
+            update_payload["bookmaker_ticket_url"] = u
+
     return update_payload
 
 
@@ -467,13 +492,19 @@ def _sync_duplicate_from_tipsport(
     duplicate: Ticket,
     data: TicketCreate,
     item: TipsportScrapeTicketIn,
+    import_batch_id: str | None = None,
+    import_batch_index: int | None = None,
+    overlay_sync: bool = False,
 ) -> Ticket | None:
     """
-    Aplikuje změny z Tipsportu na existující tiket.
-
-    Vrací aktualizovaný tiket, pokud došlo ke změně, jinak None.
+    Aplikuje změny z Tipsportu na existující tiket (včetně pořadí a označení nově naimportovaných).
     """
-    update_payload = _build_duplicate_update_payload(duplicate, data, item)
+    update_payload = _build_duplicate_update_payload(duplicate, data, item, overlay_sync=overlay_sync)
+    if import_batch_id is not None:
+        update_payload["import_batch_id"] = import_batch_id
+    if import_batch_index is not None:
+        update_payload["import_batch_index"] = import_batch_index
+    update_payload["is_newly_imported"] = True
     if not update_payload:
         return None
     return _update_ticket(
@@ -595,15 +626,11 @@ def import_from_scraper(
 ):
     """
     Import tiketů z Tipsportu přes browser scrapper.
-
-    Očekává pole „syrových“ tiketů (bez sport_id / league_id / market_type_id).
-    Backend:
-    - namapuje textové hodnoty na interní ID,
-    - zkontroluje duplicity podle kombinace bookmaker + týmy + stake + odds (+event_date),
-    - nový tiket uloží přes standardní create_ticket logiku,
-    - duplicity přeskočí.
+    overlay_sync=True: sync pro overlay – při update neměnit status na won/lost (zachovat open).
     """
     tipsport_bookmaker_id = _get_tipsport_bookmaker_id(db)
+    overlay_sync = getattr(payload, "overlay_sync", False) or False
+    import_batch_id = datetime.utcnow().strftime("%Y%m%d%H%M%S")
 
     results: List[TipsportScrapeResultItem] = []
     created_count = 0
@@ -614,6 +641,11 @@ def import_from_scraper(
     for idx, item in enumerate(payload.tickets):
         try:
             data = _build_ticket_create(db, tipsport_bookmaker_id, item)
+            data = data.model_copy(update={
+                "import_batch_id": import_batch_id,
+                "import_batch_index": idx,
+                "is_newly_imported": True,
+            })
 
             duplicate = _find_duplicate(
                 db,
@@ -628,10 +660,15 @@ def import_from_scraper(
                     db, tipsport_bookmaker_id, item.legs
                 )
             if duplicate:
-                # Upsert: synchronizovat stav s Tipsportem (důležité pro LIVE – vždy nastavit status + is_live)
+                # Upsert: synchronizovat stav s Tipsportem + pořadí a označení z importu
                 updated = None
                 try:
-                    updated = _sync_duplicate_from_tipsport(db, duplicate, data, item)
+                    updated = _sync_duplicate_from_tipsport(
+                        db, duplicate, data, item,
+                        import_batch_id=import_batch_id,
+                        import_batch_index=idx,
+                        overlay_sync=overlay_sync,
+                    )
                 except Exception:
                     updated = None
 

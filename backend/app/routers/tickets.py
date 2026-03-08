@@ -1,8 +1,8 @@
 import csv
 import io
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Body
 from fastapi.responses import StreamingResponse
 from sqlalchemy import case, or_, and_
 from sqlalchemy.orm import Session, joinedload
@@ -84,7 +84,7 @@ def list_tickets(
     odds_min: Optional[float] = None,
     odds_max: Optional[float] = None,
     incomplete: Optional[str] = Query(None, description="Jen tikety k doplnění (neúplné údaje); předat 1 nebo true"),
-    active_or_live: Optional[str] = Query(None, description="Pro stránku LIVE: 1 nebo true = status=open OR is_live=true"),
+    active_or_live: Optional[str] = Query(None, description="Pro overlay/LIVE: 1 nebo true = jen nevyhodnocené tikety (status=open)"),
     search: Optional[str] = Query(None, description="Fulltextové hledání v týmech, lize, typu sázky a výběru"),
     sort_by: str = Query(default="created_at"),
     sort_dir: str = Query(default="desc"),
@@ -132,7 +132,7 @@ def _tickets_query(
     """Sdílený dotaz pro list_tickets a export.
 
     incomplete=True: jen tikety k doplnění.
-    active_or_live=True: status=open OR is_live.
+    active_or_live=True: pouze status=open (nevyhodnocené), aby v overlay zmizely hned po vyhodnocení.
     search: fulltext přes základní textová pole (týmy, liga, trh, výběr).
     """
     query = db.query(Ticket).options(
@@ -144,7 +144,7 @@ def _tickets_query(
     if sport_id:
         query = query.filter(Ticket.sport_id == sport_id)
     if active_or_live:
-        query = query.filter(or_(Ticket.status == TicketStatus.open, Ticket.is_live == True))
+        query = query.filter(Ticket.status == TicketStatus.open)
     if incomplete:
         ostatni_id = db.query(Sport.id).filter(Sport.name == "Ostatní").scalar()
         sport_cond = Ticket.sport_id.is_(None)
@@ -222,7 +222,10 @@ def _tickets_query(
     else:
         sort_col = getattr(Ticket, sort_by, Ticket.created_at)
         if sort_by in ("created_at", "id"):
+            # Výchozí řazení: nejdřív po dávkách importu (v pořadí ze sázkovky), pak ostatní
             query = query.order_by(
+                Ticket.import_batch_id.desc().nullslast(),
+                Ticket.import_batch_index.asc().nullslast(),
                 order_key.desc() if sort_dir == "desc" else order_key.asc(),
                 Ticket.id.desc() if sort_dir == "desc" else Ticket.id.asc(),
             )
@@ -298,6 +301,23 @@ def export_tickets_csv(
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": "attachment; filename=tikety_export.csv"},
     )
+
+
+@router.post("/clear-new-mark")
+def clear_newly_imported_mark(
+    ticket_ids: Optional[List[int]] = Body(None, embed=True),
+    clear_all: bool = Body(False, embed=True),
+    db: Session = Depends(get_db),
+):
+    """Odebere označení „nově naimportované“ u zadaných tiketů nebo u všech."""
+    if clear_all:
+        updated = db.query(Ticket).filter(Ticket.is_newly_imported == True).update({"is_newly_imported": False})
+    elif ticket_ids:
+        updated = db.query(Ticket).filter(Ticket.id.in_(ticket_ids)).update({"is_newly_imported": False}, synchronize_session=False)
+    else:
+        raise HTTPException(status_code=400, detail="Zadejte ticket_ids nebo clear_all=true")
+    db.commit()
+    return {"updated": updated}
 
 
 @router.get("/{ticket_id}", response_model=TicketOut)

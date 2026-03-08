@@ -16,6 +16,7 @@ from app.schemas import (
     AnalyticsSportItem,
     AnalyticsMarketItem,
     AnalyticsTrendPoint,
+    AnalyticsWeeklyPoint,
     AnalyticsDayItem,
 )
 
@@ -252,10 +253,46 @@ def get_analytics_summary(
             )
         )
 
+    # weekly_trend – agregace po týdnech (ISO týden), aby bylo vidět zlepšení/zhoršení
+    weekly = {}
+    for t in settled:
+        dt = t.created_at or t.event_date
+        if not dt or dt.year < 2000:
+            continue
+        y, w, _ = dt.isocalendar()
+        key = (y, w)
+        if key not in weekly:
+            weekly[key] = {"won": 0, "lost": 0, "stake": Decimal("0"), "profit": Decimal("0"), "count": 0}
+        weekly[key]["count"] += 1
+        weekly[key]["stake"] += Decimal(str(t.stake or 0))
+        weekly[key]["profit"] += Decimal(str(t.profit or 0))
+        if t.status == TicketStatus.won or t.status == TicketStatus.half_win:
+            weekly[key]["won"] += 1
+        elif t.status == TicketStatus.lost or t.status == TicketStatus.half_loss:
+            weekly[key]["lost"] += 1
+
+    weekly_trend = []
+    for (y, w) in sorted(weekly.keys()):
+        d = weekly[(y, w)]
+        hr = (d["won"] / (d["won"] + d["lost"]) * 100) if (d["won"] + d["lost"]) > 0 else 0.0
+        ro = (float(d["profit"]) / float(d["stake"]) * 100) if d["stake"] else 0.0
+        mon = datetime.strptime(f"{y}-W{w}-1", "%G-W%V-%u")
+        week_label = mon.strftime("%d.%m.")
+        weekly_trend.append(
+            AnalyticsWeeklyPoint(
+                week_label=week_label,
+                profit=d["profit"],
+                roi_percent=round(ro, 2),
+                hitrate_percent=round(hr, 2),
+                bets_count=d["count"],
+            )
+        )
+
     return AnalyticsSummary(
         kpis=kpis,
         by_sport=by_sport,
         by_market=by_market,
         by_day_of_week=by_day_of_week,
         profit_trend=profit_trend,
+        weekly_trend=weekly_trend,
     )

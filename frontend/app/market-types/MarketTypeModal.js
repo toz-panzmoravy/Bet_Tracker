@@ -30,7 +30,7 @@ export default function MarketTypeModal({ isOpen, onClose, onSubmit, editingId, 
         <div className="modal-overlay" onClick={onClose}>
             <div className="modal-content glass-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 600 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
-                    <h2 style={{ fontSize: "1.25rem", fontWeight: 700, margin: 0 }}>
+                    <h2 className="section-title" style={{ margin: 0 }}>
                         {editingId ? "✏️ Upravit typ sázky" : "➕ Nový typ sázky"}
                     </h2>
                     <button className="btn-icon" onClick={onClose} style={{ fontSize: "1.5rem" }}>×</button>
@@ -39,7 +39,7 @@ export default function MarketTypeModal({ isOpen, onClose, onSubmit, editingId, 
                 <form onSubmit={(e) => { e.preventDefault(); onSubmit(e); }}>
                     <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
                         <div>
-                            <label style={{ display: "block", fontSize: "0.85rem", fontWeight: 500, color: "var(--color-text-secondary)", marginBottom: 8 }}>
+                            <label style={{ display: "block", fontSize: "0.85rem", fontWeight: 500, color: "var(--text-secondary)", marginBottom: 8 }}>
                                 Název typu sázky
                             </label>
                             <input
@@ -53,17 +53,17 @@ export default function MarketTypeModal({ isOpen, onClose, onSubmit, editingId, 
                         </div>
 
                         <div>
-                            <label style={{ display: "block", fontSize: "0.85rem", fontWeight: 500, color: "var(--color-text-secondary)", marginBottom: 8 }}>
+                            <label style={{ display: "block", fontSize: "0.85rem", fontWeight: 500, color: "var(--text-secondary)", marginBottom: 8 }}>
                                 Platné pro sporty
                             </label>
                             <div style={{
                                 display: "grid",
                                 gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))",
                                 gap: 8,
-                                background: "rgba(255,255,255,0.03)",
+                                background: "var(--surface-subtle)",
                                 padding: "12px",
                                 borderRadius: "12px",
-                                border: "1px solid var(--color-border)"
+                                border: "1px solid var(--border)"
                             }}>
                                 {sports.map(sport => (
                                     <label key={sport.id} style={{
@@ -86,13 +86,13 @@ export default function MarketTypeModal({ isOpen, onClose, onSubmit, editingId, 
                                     </label>
                                 ))}
                             </div>
-                            <p style={{ margin: "6px 0 0 4px", fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+                            <p style={{ margin: "6px 0 0 4px", fontSize: "0.75rem", color: "var(--text-muted)" }}>
                                 {(formData.sport_ids || []).length === 0 ? "💡 Ponech prázdné pro všechny sporty" : `💡 Vybráno ${formData.sport_ids.length} sportů`}
                             </p>
                         </div>
 
                         <div>
-                            <label style={{ display: "block", fontSize: "0.85rem", fontWeight: 500, color: "var(--color-text-secondary)", marginBottom: 8 }}>
+                            <label style={{ display: "block", fontSize: "0.85rem", fontWeight: 500, color: "var(--text-secondary)", marginBottom: 8 }}>
                                 Popis (volitelný)
                             </label>
                             <textarea
@@ -121,11 +121,11 @@ export default function MarketTypeModal({ isOpen, onClose, onSubmit, editingId, 
           background: none;
           border: none;
           cursor: pointer;
-          color: var(--color-text-muted);
+          color: var(--text-muted);
           transition: color 0.2s;
         }
         .btn-icon:hover {
-          color: var(--color-text-primary);
+          color: var(--text-primary);
         }
       `}</style>
         </div>

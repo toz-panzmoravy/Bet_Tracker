@@ -29,6 +29,7 @@ def seed():
             ("Tenis", "🎾"),
             ("Basketbal", "🏀"),
             ("Esport", "🎮"),
+            ("Volejbal", "🏐"),
             ("Florbal", "🏑"),
             ("Darts", "🎯"),
             ("Rugby", "🏉"),

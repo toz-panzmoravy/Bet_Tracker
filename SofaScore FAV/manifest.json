@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "SofaScore FAV – sync z BetTrackeru",
+  "version": "0.1.0",
+  "description": "Přidá zápasy z BetTrackeru (live a upcoming) do SofaScore Favourites. Vyžaduje běžící BetTracker backend a přihlášení na SofaScore.",
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "*://*.sofascore.com/*",
+    "http://127.0.0.1:15555/*",
+    "http://localhost:15555/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*.sofascore.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "options_ui": {
+    "page": "options.html"
+  }
+}

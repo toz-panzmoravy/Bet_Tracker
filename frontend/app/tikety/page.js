@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { getTickets, deleteTicket, updateTicket, createTicket, getSports, getBookmakers, exportTicketsCsv } from "../lib/api";
+import { getTickets, deleteTicket, updateTicket, createTicket, getSports, getBookmakers, exportTicketsCsv, clearNewlyImportedMark } from "../lib/api";
 
 const TICKETS_PAGE_SIZE = 50;
 const FILTERS_STORAGE_KEY = "bettracker_tickets_filters";
@@ -62,6 +62,15 @@ const STATUS_MAP = {
 
 const STATUS_OPTIONS = ["open", "won", "lost", "void", "half_win", "half_loss"];
 
+function getBookmakerBadgeClass(name) {
+  if (!name) return "other";
+  const n = (name || "").toLowerCase();
+  if (n.includes("tipsport")) return "tipsport";
+  if (n.includes("betano")) return "betano";
+  if (n.includes("fortuna")) return "fortuna";
+  return "other";
+}
+
 function InlineStatusSelect({ ticket, onUpdate }) {
     const [updating, setUpdating] = useState(false);
 
@@ -88,13 +97,12 @@ function InlineStatusSelect({ ticket, onUpdate }) {
                 cursor: "pointer",
                 padding: "4px 28px 4px 12px",
                 borderRadius: "20px",
-                border: "1px solid rgba(255,255,255,0.1)",
                 fontWeight: 600,
                 fontSize: "0.75rem"
             }}
         >
             {STATUS_OPTIONS.map((s) => (
-                <option key={s} value={s} style={{ background: "#222", color: "#fff" }}>
+                <option key={s} value={s} style={{ background: "var(--bg-card)", color: "var(--text-primary)" }}>
                     {STATUS_MAP[s].icon} {STATUS_MAP[s].label}
                 </option>
             ))}
@@ -234,37 +242,37 @@ function AddAkuLegForm({ parent, sports, onSuccess, onCancel, onError }) {
             <td colSpan={12} style={{ padding: "12px 16px", background: "var(--color-bg-card)", borderBottom: "1px solid var(--color-border)", verticalAlign: "top" }}>
                 <form onSubmit={handleSubmit} style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "flex-end", maxWidth: 900 }}>
                     <div className="form-group" style={{ minWidth: 120 }}>
-                        <label style={{ fontSize: "0.7rem", color: "var(--color-text-muted)", display: "block", marginBottom: 2 }}>Sport</label>
+                        <label style={{ fontSize: "0.7rem", color: "var(--text-muted)", display: "block", marginBottom: 2 }}>Sport</label>
                         <select className="input" style={{ padding: "6px 10px", fontSize: "0.8rem" }} value={form.sport_id} onChange={e => setForm(f => ({ ...f, sport_id: e.target.value }))} required>
                             {sports.map(s => <option key={s.id} value={s.id}>{s.icon} {s.name}</option>)}
                         </select>
                     </div>
                     <div className="form-group" style={{ minWidth: 100 }}>
-                        <label style={{ fontSize: "0.7rem", color: "var(--color-text-muted)", display: "block", marginBottom: 2 }}>Domácí</label>
+                        <label style={{ fontSize: "0.7rem", color: "var(--text-muted)", display: "block", marginBottom: 2 }}>Domácí</label>
                         <input className="input" style={{ padding: "6px 10px", fontSize: "0.8rem" }} placeholder="–" value={form.home_team} onChange={e => setForm(f => ({ ...f, home_team: e.target.value }))} />
                     </div>
                     <div className="form-group" style={{ minWidth: 100 }}>
-                        <label style={{ fontSize: "0.7rem", color: "var(--color-text-muted)", display: "block", marginBottom: 2 }}>Hosté</label>
+                        <label style={{ fontSize: "0.7rem", color: "var(--text-muted)", display: "block", marginBottom: 2 }}>Hosté</label>
                         <input className="input" style={{ padding: "6px 10px", fontSize: "0.8rem" }} placeholder="–" value={form.away_team} onChange={e => setForm(f => ({ ...f, away_team: e.target.value }))} />
                     </div>
                     <div className="form-group" style={{ minWidth: 90 }}>
-                        <label style={{ fontSize: "0.7rem", color: "var(--color-text-muted)", display: "block", marginBottom: 2 }}>Typ sázky</label>
+                        <label style={{ fontSize: "0.7rem", color: "var(--text-muted)", display: "block", marginBottom: 2 }}>Typ sázky</label>
                         <input className="input" style={{ padding: "6px 10px", fontSize: "0.8rem" }} placeholder="1X2" value={form.market_label} onChange={e => setForm(f => ({ ...f, market_label: e.target.value }))} />
                     </div>
                     <div className="form-group" style={{ minWidth: 100 }}>
-                        <label style={{ fontSize: "0.7rem", color: "var(--color-text-muted)", display: "block", marginBottom: 2 }}>Výběr</label>
+                        <label style={{ fontSize: "0.7rem", color: "var(--text-muted)", display: "block", marginBottom: 2 }}>Výběr</label>
                         <input className="input" style={{ padding: "6px 10px", fontSize: "0.8rem" }} value={form.selection} onChange={e => setForm(f => ({ ...f, selection: e.target.value }))} />
                     </div>
                     <div className="form-group" style={{ width: 70 }}>
-                        <label style={{ fontSize: "0.7rem", color: "var(--color-text-muted)", display: "block", marginBottom: 2 }}>Kurz</label>
+                        <label style={{ fontSize: "0.7rem", color: "var(--text-muted)", display: "block", marginBottom: 2 }}>Kurz</label>
                         <input type="number" step="0.01" className="input" style={{ padding: "6px 10px", fontSize: "0.8rem" }} value={form.odds} onChange={e => setForm(f => ({ ...f, odds: e.target.value }))} required />
                     </div>
                     <div className="form-group" style={{ width: 80 }}>
-                        <label style={{ fontSize: "0.7rem", color: "var(--color-text-muted)", display: "block", marginBottom: 2 }}>Vklad</label>
+                        <label style={{ fontSize: "0.7rem", color: "var(--text-muted)", display: "block", marginBottom: 2 }}>Vklad</label>
                         <input type="number" className="input" style={{ padding: "6px 10px", fontSize: "0.8rem" }} value={form.stake} onChange={e => setForm(f => ({ ...f, stake: e.target.value }))} required />
                     </div>
                     <div className="form-group" style={{ minWidth: 100 }}>
-                        <label style={{ fontSize: "0.7rem", color: "var(--color-text-muted)", display: "block", marginBottom: 2 }}>Stav</label>
+                        <label style={{ fontSize: "0.7rem", color: "var(--text-muted)", display: "block", marginBottom: 2 }}>Stav</label>
                         <select className="input" style={{ padding: "6px 10px", fontSize: "0.8rem" }} value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>
                             {STATUS_OPTIONS.map(s => <option key={s} value={s}>{STATUS_MAP[s].icon} {STATUS_MAP[s].label}</option>)}
                         </select>
@@ -316,13 +324,13 @@ function EditTicketModal({ ticket, onClose, onSave, sports, bookmakers }) {
                 <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                         <div className="form-group">
-                            <label style={{ fontSize: "0.75rem", color: "#8b8fa3", display: "block", marginBottom: 4 }}>Sport</label>
+                            <label style={{ fontSize: "0.75rem", color: "var(--text-muted)", display: "block", marginBottom: 4 }}>Sport</label>
                             <select className="input" style={{ width: "100%" }} value={form.sport_id || ""} onChange={e => setForm({ ...form, sport_id: e.target.value })}>
                                 {sports.map(s => <option key={s.id} value={s.id}>{s.icon} {s.name}</option>)}
                             </select>
                         </div>
                         <div className="form-group">
-                            <label style={{ fontSize: "0.75rem", color: "#8b8fa3", display: "block", marginBottom: 4 }}>Sázkovka</label>
+                            <label style={{ fontSize: "0.75rem", color: "var(--text-muted)", display: "block", marginBottom: 4 }}>Sázkovka</label>
                             <select className="input" style={{ width: "100%" }} value={form.bookmaker_id || ""} onChange={e => setForm({ ...form, bookmaker_id: e.target.value })}>
                                 {bookmakers.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                             </select>
@@ -330,16 +338,16 @@ function EditTicketModal({ ticket, onClose, onSave, sports, bookmakers }) {
                     </div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                         <div className="form-group">
-                            <label style={{ fontSize: "0.75rem", color: "#8b8fa3", display: "block", marginBottom: 4 }}>Domácí</label>
+                            <label style={{ fontSize: "0.75rem", color: "var(--text-muted)", display: "block", marginBottom: 4 }}>Domácí</label>
                             <input className="input" style={{ width: "100%" }} value={form.home_team || ""} onChange={e => setForm({ ...form, home_team: e.target.value })} />
                         </div>
                         <div className="form-group">
-                            <label style={{ fontSize: "0.75rem", color: "#8b8fa3", display: "block", marginBottom: 4 }}>Hosté</label>
+                            <label style={{ fontSize: "0.75rem", color: "var(--text-muted)", display: "block", marginBottom: 4 }}>Hosté</label>
                             <input className="input" style={{ width: "100%" }} value={form.away_team || ""} onChange={e => setForm({ ...form, away_team: e.target.value })} />
                         </div>
                     </div>
                     <div className="form-group">
-                        <label style={{ fontSize: "0.75rem", color: "#8b8fa3", display: "block", marginBottom: 4 }}>Typ tiketu</label>
+                        <label style={{ fontSize: "0.75rem", color: "var(--text-muted)", display: "block", marginBottom: 4 }}>Typ tiketu</label>
                         <select className="input" style={{ width: "100%" }} value={form.ticket_type || "solo"} onChange={e => setForm({ ...form, ticket_type: e.target.value })}>
                             <option value="solo">SÓLO (jedna sázka)</option>
                             <option value="aku">AKU (akumulátor)</option>
@@ -347,29 +355,29 @@ function EditTicketModal({ ticket, onClose, onSave, sports, bookmakers }) {
                     </div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                         <div className="form-group">
-                            <label style={{ fontSize: "0.75rem", color: "#8b8fa3", display: "block", marginBottom: 4 }}>Typ sázky</label>
+                            <label style={{ fontSize: "0.75rem", color: "var(--text-muted)", display: "block", marginBottom: 4 }}>Typ sázky</label>
                             <input className="input" style={{ width: "100%" }} value={form.market_label || form.market_type || ""} onChange={e => setForm({ ...form, market_label: e.target.value })} placeholder="např. 1X2" />
                         </div>
                         <div className="form-group">
-                            <label style={{ fontSize: "0.75rem", color: "#8b8fa3", display: "block", marginBottom: 4 }}>Výběr</label>
+                            <label style={{ fontSize: "0.75rem", color: "var(--text-muted)", display: "block", marginBottom: 4 }}>Výběr</label>
                             <input className="input" style={{ width: "100%" }} value={form.selection || ""} onChange={e => setForm({ ...form, selection: e.target.value })} />
                         </div>
                     </div>
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
                         <div className="form-group">
-                            <label style={{ fontSize: "0.75rem", color: "#8b8fa3", display: "block", marginBottom: 4 }}>Kurz</label>
+                            <label style={{ fontSize: "0.75rem", color: "var(--text-muted)", display: "block", marginBottom: 4 }}>Kurz</label>
                             <input type="number" step="0.01" className="input" style={{ width: "100%" }} value={form.odds || ""} onChange={e => setForm({ ...form, odds: e.target.value })} />
                         </div>
                         <div className="form-group">
-                            <label style={{ fontSize: "0.75rem", color: "#8b8fa3", display: "block", marginBottom: 4 }}>Vklad</label>
+                            <label style={{ fontSize: "0.75rem", color: "var(--text-muted)", display: "block", marginBottom: 4 }}>Vklad</label>
                             <input type="number" className="input" style={{ width: "100%" }} value={form.stake || ""} onChange={e => setForm({ ...form, stake: e.target.value })} />
                         </div>
                         <div className="form-group">
-                            <label style={{ fontSize: "0.75rem", color: "#8b8fa3", display: "block", marginBottom: 4 }}>Výhra</label>
+                            <label style={{ fontSize: "0.75rem", color: "var(--text-muted)", display: "block", marginBottom: 4 }}>Výhra</label>
                             <input type="number" className="input" style={{ width: "100%" }} value={form.payout || ""} onChange={e => setForm({ ...form, payout: e.target.value })} />
                         </div>
                         <div className="form-group">
-                            <label style={{ fontSize: "0.75rem", color: "#8b8fa3", display: "block", marginBottom: 4 }}>Stav</label>
+                            <label style={{ fontSize: "0.75rem", color: "var(--text-muted)", display: "block", marginBottom: 4 }}>Stav</label>
                             <select className="input" style={{ width: "100%" }} value={form.status || "open"} onChange={e => setForm({ ...form, status: e.target.value })}>
                                 {STATUS_OPTIONS.map(s => (
                                     <option key={s} value={s}>{STATUS_MAP[s].icon} {STATUS_MAP[s].label}</option>
@@ -406,6 +414,7 @@ function TiketyPageContent() {
     const [deleteConfirmId, setDeleteConfirmId] = useState(null);
     const [expandedParents, setExpandedParents] = useState({});
     const [addingLegToParentId, setAddingLegToParentId] = useState(null);
+    const [loadError, setLoadError] = useState(null);
     const toast = useToast();
 
     useEffect(() => {
@@ -453,8 +462,10 @@ function TiketyPageContent() {
 
     async function loadTickets(append = false) {
         const offset = append ? tickets.length : 0;
-        if (!append) setLoading(true);
-        else setLoadingMore(true);
+        if (!append) {
+            setLoading(true);
+            setLoadError(null);
+        } else setLoadingMore(true);
         try {
             const params = { ...filters, sort_by: sortBy, sort_dir: sortDir, limit: TICKETS_PAGE_SIZE, offset };
             if (filters.incomplete) params.incomplete = 1;
@@ -468,8 +479,12 @@ function TiketyPageContent() {
             } else {
                 setTickets(items);
             }
+            setLoadError(null);
         } catch (e) {
-            toast.error("Chyba načítání tiketů: " + e.message);
+            const msg = e?.message || "";
+            const isBackendDown = msg.includes("Backend nedostupný") || msg.includes("Failed to fetch");
+            if (isBackendDown) setLoadError(msg);
+            else toast.error("Chyba načítání tiketů: " + msg);
         } finally {
             setLoading(false);
             setLoadingMore(false);
@@ -595,34 +610,19 @@ function TiketyPageContent() {
         const rowStyle = {};
 
         if (isAkuParent) {
-            rowStyle.background = "var(--color-bg-card-hover)";
+            rowStyle.background = "var(--bg-card-hover)";
         } else if (isChild) {
-            rowStyle.background = "var(--color-bg-card)";
+            rowStyle.background = "var(--bg-card)";
         }
         if (isIncompleteRow) {
-            rowStyle.borderLeft = "3px solid var(--color-yellow)";
+            rowStyle.borderLeft = "3px solid var(--warning)";
+        }
+        if (t.is_newly_imported) {
+            rowStyle.boxShadow = "inset 4px 0 0 var(--accent)";
         }
 
-        const bookmakerStyle = t.bookmaker
-            ? {
-                fontSize: "0.75rem",
-                padding: "2px 6px",
-                borderRadius: "999px",
-                border: "1px solid var(--color-border-hover)",
-                color: "var(--color-text-secondary)",
-                fontWeight: 700,
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                minWidth: "24px",
-                textAlign: "center",
-                background: t.bookmaker.name === "Tipsport"
-                    ? "rgba(59,130,246,0.15)"
-                    : t.bookmaker.name === "Betano"
-                        ? "rgba(249,115,22,0.15)"
-                        : "transparent",
-            }
-            : null;
+        const bookmakerName = t.bookmaker?.name || "—";
+        const bookmakerBadgeClass = getBookmakerBadgeClass(bookmakerName);
 
         const childCount = isAkuParent ? (childrenByParent[t.id]?.length || 0) : 0;
 
@@ -638,12 +638,13 @@ function TiketyPageContent() {
                                     [t.id]: !prev[t.id],
                                 }))
                             }
+                            type="button"
                             style={{
                                 marginRight: 6,
                                 cursor: "pointer",
                                 background: "transparent",
                                 border: "none",
-                                color: "var(--color-text-muted)",
+                                color: "var(--text-muted)",
                                 padding: 0,
                             }}
                             aria-label={expandedParents[t.id] ? "Skrýt pod-sázky" : "Zobrazit pod-sázky"}
@@ -652,15 +653,17 @@ function TiketyPageContent() {
                         </button>
                     )}
                     {isChild && !isAkuParent && (
-                        <span style={{ marginRight: 6, color: "var(--color-text-muted)" }}>↳</span>
+                        <span style={{ marginRight: 6, color: "var(--text-muted)" }}>↳</span>
                     )}
                     {t.created_at ? new Date(t.created_at).toLocaleDateString("cs-CZ") : "–"}
                 </td>
                 <td>
-                    {t.bookmaker && (
-                        <span style={bookmakerStyle} title={t.bookmaker.name}>
-                            {(t.bookmaker.name || "?")[0]}
+                    {t.bookmaker ? (
+                        <span className={`bookmaker-badge bookmaker-badge--${bookmakerBadgeClass}`} title={bookmakerName}>
+                            {bookmakerName}
                         </span>
+                    ) : (
+                        <span className="bookmaker-badge bookmaker-badge--other">—</span>
                     )}
                 </td>
                 <td>
@@ -672,8 +675,8 @@ function TiketyPageContent() {
                                 fontSize: "0.65rem",
                                 padding: "2px 5px",
                                 borderRadius: 4,
-                                background: t.ticket_type === "aku" ? "var(--color-accent-soft)" : "rgba(255,255,255,0.06)",
-                                color: t.ticket_type === "aku" ? "var(--color-accent)" : "var(--color-text-muted)",
+                                background: t.ticket_type === "aku" ? "var(--accent-soft)" : "var(--surface-subtle)",
+                                color: t.ticket_type === "aku" ? "var(--accent)" : "var(--text-muted)",
                                 fontWeight: 600,
                             }}>
                                 {t.ticket_type === "aku" ? "AKU" : "SÓLO"}
@@ -682,7 +685,7 @@ function TiketyPageContent() {
                         {isAkuParent && childCount > 0 && (
                             <span style={{
                                 fontSize: "0.7rem",
-                                color: "var(--color-text-secondary)",
+                                color: "var(--text-secondary)",
                             }}>
                                 • {childCount} sázky
                             </span>
@@ -692,11 +695,23 @@ function TiketyPageContent() {
                                 fontSize: "0.65rem",
                                 padding: "2px 6px",
                                 borderRadius: 4,
-                                background: "var(--color-yellow-soft)",
-                                color: "var(--color-yellow)",
+                                background: "var(--warning-soft)",
+                                color: "var(--warning)",
                                 fontWeight: 600,
                             }}>
                                 K&nbsp;doplnění
+                            </span>
+                        )}
+                        {t.is_newly_imported && (
+                            <span style={{
+                                fontSize: "0.65rem",
+                                padding: "2px 6px",
+                                borderRadius: 4,
+                                background: "var(--accent-soft)",
+                                color: "var(--accent)",
+                                fontWeight: 600,
+                            }} title="Nově naimportované – po kontrole odeber označení">
+                                Nově
                             </span>
                         )}
                     </div>
@@ -707,7 +722,7 @@ function TiketyPageContent() {
                         : <>{t.home_team} – {t.away_team}</>
                     }
                 </td>
-                <td style={{ color: "var(--color-text-secondary)" }}>
+                <td style={{ color: "var(--text-secondary)" }}>
                     {akuAggregate ? "Kombinace" : (t.market_label || t.market_type || "–")}
                 </td>
                 <td>{akuAggregate ? "–" : (t.selection || "–")}</td>
@@ -732,7 +747,7 @@ function TiketyPageContent() {
                 </td>
                 <td style={{
                     fontWeight: 600,
-                    color: profit > 0 ? "var(--color-green)" : profit < 0 ? "var(--color-red)" : "var(--color-text-secondary)"
+                    color: profit > 0 ? "var(--success)" : profit < 0 ? "var(--danger)" : "var(--text-secondary)"
                 }}>
                     {akuAggregate && t.stake != null
                         ? (akuAggregate.derivedStatus === "won" && effectiveOdds > 0
@@ -760,14 +775,16 @@ function TiketyPageContent() {
                 <td style={{ whiteSpace: "nowrap" }}>
                     <div style={{ display: "flex", gap: 6 }}>
                         <button
-                            className="btn btn-ghost"
-                            style={{ padding: "4px 8px", fontSize: "0.8rem", border: "1px solid rgba(255,255,255,0.1)" }}
+                            type="button"
+                            className="btn-icon-v2"
                             onClick={() => setEditingTicket(t)}
+                            title="Upravit"
                         >✏️</button>
                         <button
-                            className="btn btn-danger"
-                            style={{ padding: "4px 8px", fontSize: "0.8rem" }}
+                            type="button"
+                            className="btn-icon-v2 danger"
                             onClick={() => handleDeleteClick(t.id)}
+                            title="Smazat"
                         >🗑</button>
                     </div>
                 </td>
@@ -776,39 +793,67 @@ function TiketyPageContent() {
     }
 
     return (
-        <div>
+        <div className="content-width">
             <Confetti active={showConfetti} onDone={() => setShowConfetti(false)} />
 
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem", flexWrap: "wrap", gap: 12 }}>
+            <header className="page-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 16 }}>
                 <div>
-                    <h1 style={{ fontSize: "1.5rem", fontWeight: 700 }}>🎫 Tikety</h1>
-                    <p style={{ fontSize: "0.85rem", color: "var(--color-text-secondary)" }}>
-                        {totalCount != null ? `Zobrazeno ${tickets.length} z ${totalCount}` : `${tickets.length} tiketů`}
-                        {" • "}Vklad: {totalStake.toLocaleString("cs-CZ")} Kč •
-                        Profit: <span style={{ color: totalProfit >= 0 ? "var(--color-green)" : "var(--color-red)" }}>
-                            {totalProfit.toLocaleString("cs-CZ")} Kč
-                        </span>
+                    <h1 className="page-title">Tikety</h1>
+                    <p className="page-subtitle" style={{ marginBottom: 12 }}>
+                        Přehled všech sázek – filtry, úpravy a export
                     </p>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
+                        <span className="glass-card" style={{ padding: "6px 14px", fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)" }}>
+                            {totalCount != null ? `${tickets.length} / ${totalCount}` : tickets.length} tiketů
+                        </span>
+                        <span className="glass-card" style={{ padding: "6px 14px", fontSize: "0.8rem", fontWeight: 600, color: "var(--text-primary)" }}>
+                            Vklad: {totalStake.toLocaleString("cs-CZ")} Kč
+                        </span>
+                        <span className="glass-card" style={{ padding: "6px 14px", fontSize: "0.8rem", fontWeight: 700, color: totalProfit >= 0 ? "var(--success)" : "var(--danger)" }}>
+                            Profit: {totalProfit >= 0 ? "+" : ""}{totalProfit.toLocaleString("cs-CZ")} Kč
+                        </span>
+                    </div>
                 </div>
-                <button
-                    type="button"
-                    className="btn btn-ghost"
-                    onClick={async () => {
-                        try {
-                            await exportTicketsCsv({ ...filters, sort_by: sortBy, sort_dir: sortDir });
-                            toast.success("Export CSV stažen");
-                        } catch (e) {
-                            toast.error("Export selhal: " + e.message);
-                        }
-                    }}
-                >
-                    📥 Export CSV
-                </button>
-            </div>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    {tickets.some((t) => t.is_newly_imported) && (
+                        <button
+                            type="button"
+                            className="btn btn-ghost"
+                            onClick={async () => {
+                                try {
+                                    const res = await clearNewlyImportedMark({ clear_all: true });
+                                    toast.success(`Označení odebráno u ${res?.updated ?? 0} tiketů`);
+                                    loadTickets(false);
+                                } catch (e) {
+                                    toast.error("Chyba: " + e.message);
+                                }
+                            }}
+                        >
+                            ✕ Odebrat označení „Nově“
+                        </button>
+                    )}
+                    <button
+                        type="button"
+                        className="btn btn-ghost"
+                        onClick={async () => {
+                            try {
+                                await exportTicketsCsv({ ...filters, sort_by: sortBy, sort_dir: sortDir });
+                                toast.success("Export CSV stažen");
+                            } catch (e) {
+                                toast.error("Export selhal: " + e.message);
+                            }
+                        }}
+                    >
+                        📥 Export CSV
+                    </button>
+                </div>
+            </header>
 
             {/* Filters */}
-            <div className="glass-card" style={{ padding: "1rem 1.25rem", marginBottom: "1.5rem", display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-                <select className="input" style={{ width: 150 }}
+            <div className="glass-card" style={{ padding: "1rem 1.25rem", marginBottom: "1.5rem" }}>
+                <p className="section-title" style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10 }}>Filtry</p>
+                <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+                <select className="input" style={{ width: 160 }}
                     value={filters.bookmaker_id || ""}
                     onChange={(e) => setFilters({ ...filters, bookmaker_id: e.target.value || undefined })}
                 >
@@ -865,21 +910,40 @@ function TiketyPageContent() {
                     <span>Jen neúplné</span>
                 </label>
                 {Object.keys(filters).length > 0 && (
-                    <button className="btn btn-ghost" onClick={() => setFilters({})}>✕ Reset</button>
+                    <button className="btn btn-ghost" onClick={() => setFilters({})} style={{ marginLeft: 4 }}>✕ Reset filtrů</button>
                 )}
+                </div>
             </div>
 
+            {/* Backend nedostupný – jasný blok s návodem a opakováním */}
+            {loadError && !loading && (
+                <div className="glass-card" style={{ padding: "2rem", marginBottom: "1.5rem", textAlign: "center" }}>
+                    <p style={{ fontSize: "2rem", marginBottom: 12 }}>⚠️</p>
+                    <h2 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: 8, color: "var(--text-primary)" }}>Backend neběží</h2>
+                    <p style={{ fontSize: "0.9rem", color: "var(--text-secondary)", marginBottom: 16, maxWidth: 420, margin: "0 auto 16px" }}>
+                        Aplikace nemůže načíst tikety. Spusťte nejdřív backend: <strong>run-backend.bat</strong> nebo <strong>BetTracker.bat</strong> (v kořeni projektu).
+                    </p>
+                    <button type="button" className="btn btn-primary" onClick={() => loadTickets(false)}>
+                        Zkusit znovu
+                    </button>
+                </div>
+            )}
+
             {/* Table */}
-            <div className="glass-card tickets-table-wrapper" style={{ overflow: "auto" }}>
+            <div className="glass-card tickets-table-wrapper" style={{ overflow: "auto", overflowX: "auto" }}>
                 {loading ? (
                     <div style={{ padding: "1.25rem" }}>
                         <TicketsSkeleton />
                     </div>
+                ) : loadError ? (
+                    <div style={{ padding: "2rem", textAlign: "center", color: "var(--text-muted)", fontSize: "0.9rem" }}>
+                        Po spuštění backendu klikněte výše na „Zkusit znovu“.
+                    </div>
                 ) : tickets.length === 0 ? (
-                    <div style={{ textAlign: "center", padding: "4rem", color: "var(--color-text-muted)" }}>
-                        <p style={{ fontSize: "2rem", marginBottom: 8 }}>🎫</p>
-                        <p>Zatím nemáš žádné tikety.</p>
-                        <p style={{ fontSize: "0.8rem" }}>Přejdi na <strong>Import</strong> a vlož screenshot z Tipsportu.</p>
+                    <div style={{ textAlign: "center", padding: "3rem 2rem", color: "var(--text-muted)" }}>
+                        <p style={{ fontSize: "2.5rem", marginBottom: 12, opacity: 0.6 }}>🎫</p>
+                        <p style={{ fontSize: "1rem", fontWeight: 600, color: "var(--text-secondary)", marginBottom: 6 }}>Zatím nemáš žádné tikety</p>
+                        <p style={{ fontSize: "0.85rem" }}>Použij rozšíření v prohlížeči (Tipsport, Betano, Fortuna) nebo stránku <strong>Import</strong> pro nahrání sázek.</p>
                     </div>
                 ) : (
                     <table className="data-table">
@@ -935,7 +999,7 @@ function TiketyPageContent() {
                                     } else {
                                         rows.push(
                                             <tr key={`add-leg-btn-${t.id}`}>
-                                                <td colSpan={12} style={{ padding: "8px 16px", background: "var(--color-bg-card)", borderBottom: "1px solid var(--color-border)" }}>
+                                                <td colSpan={12} style={{ padding: "8px 16px", background: "var(--bg-card)", borderBottom: "1px solid var(--border)" }}>
                                                     <button
                                                         type="button"
                                                         className="btn btn-ghost"

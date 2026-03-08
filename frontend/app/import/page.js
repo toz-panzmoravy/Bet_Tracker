@@ -500,10 +500,10 @@ function ImportPageContent() {
         <div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
                 <div>
-                    <h1 style={{ fontSize: "1.5rem", fontWeight: 700 }}>📸 Import tiketů</h1>
-                    <p style={{ fontSize: "0.85rem", color: "var(--color-text-secondary)" }}>
+                    <h1 className="page-title">📸 Import tiketů</h1>
+                    <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>
                         Vlož screenshot z Tipsportu pomocí{" "}
-                        <kbd style={{ background: "var(--color-bg-card)", padding: "2px 8px", borderRadius: 6, fontSize: "0.8rem", border: "1px solid var(--color-border)" }}>Ctrl+V</kbd>
+                        <kbd style={{ background: "var(--bg-card)", padding: "2px 8px", borderRadius: 6, fontSize: "0.8rem", border: "1px solid var(--border)" }}>Ctrl+V</kbd>
                         {" "}nebo přetáhni obrázek
                     </p>
                 </div>
@@ -513,18 +513,18 @@ function ImportPageContent() {
             </div>
 
             {previewError && (
-                <div style={{ marginBottom: 16, padding: 12, borderRadius: 8, background: "var(--color-red-soft)", color: "var(--color-red)", fontSize: "0.9rem" }}>
+                <div style={{ marginBottom: 16, padding: 12, borderRadius: 8, background: "var(--danger-soft)", color: "var(--danger)", fontSize: "0.9rem" }}>
                     {previewError}
                 </div>
             )}
             {previewId && parsedTickets.length > 0 && !previewError && (
-                <div style={{ marginBottom: 16, padding: 12, borderRadius: 8, background: "var(--color-accent-soft)", color: "var(--color-accent)", fontSize: "0.9rem" }}>
+                <div style={{ marginBottom: 16, padding: 12, borderRadius: 8, background: "var(--accent-soft)", color: "var(--accent)", fontSize: "0.9rem" }}>
                     Tikety z extension – zkontrolujte a uložte.
                 </div>
             )}
 
             {/* Výběr zdroje OCR */}
-            <div style={{ marginBottom: 16, display: "flex", gap: 16, alignItems: "center", background: "var(--color-bg-card)", padding: "12px 16px", borderRadius: 12, border: "1px solid var(--color-border)" }}>
+            <div style={{ marginBottom: 16, display: "flex", gap: 16, alignItems: "center", background: "var(--bg-card)", padding: "12px 16px", borderRadius: 12, border: "1px solid var(--border)" }}>
                 <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>Vyberte sázkovou kancelář před nahráním tiketu:</span>
                 <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "0.85rem", cursor: "pointer", opacity: ocrBookmaker === "tipsport" ? 1 : 0.6 }}>
                     <input type="radio" name="ocrBookmaker" value="tipsport" checked={ocrBookmaker === "tipsport"} onChange={() => handleBookmakerChange("tipsport")} />
@@ -571,14 +571,14 @@ function ImportPageContent() {
                         textAlign: "center",
                         padding: "3rem 2rem",
                         cursor: "pointer",
-                        border: "2px dashed var(--color-border)",
+                        border: "2px dashed var(--border)",
                     }}
                 >
                     <p style={{ fontSize: "2.5rem", marginBottom: 8, opacity: 0.4 }}>📸</p>
-                    <p style={{ fontSize: "0.85rem", color: "var(--color-text-primary)", marginBottom: 4 }}>
+                    <p style={{ fontSize: "0.85rem", color: "var(--text-primary)", marginBottom: 4 }}>
                         Vlož screenshot (Ctrl+V) nebo přetáhni obrázek
                     </p>
-                    <p style={{ fontSize: "0.7rem", color: "var(--color-text-muted)", marginTop: 4 }}>
+                    <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", marginTop: 4 }}>
                         Klikni sem nebo vlož obrázek ze schránky
                     </p>
                 </div>
@@ -592,7 +592,7 @@ function ImportPageContent() {
                                 <div style={{ display: "flex", gap: 8 }}>
                                     <button
                                         className={`btn btn-ghost ${restartStatus === 'error' ? 'text-error' : ''}`}
-                                        style={{ padding: "4px 12px", fontSize: "0.8rem", color: restartStatus === 'restarting' ? 'var(--color-yellow)' : (restartStatus === 'ok_confirmed' ? 'var(--color-success)' : '') }}
+                                        style={{ padding: "4px 12px", fontSize: "0.8rem", color: restartStatus === 'restarting' ? 'var(--warning)' : (restartStatus === 'ok_confirmed' ? 'var(--success)' : '') }}
                                         onClick={handleRestartOcr}
                                         disabled={restartStatus === 'restarting'}
                                     >
@@ -604,19 +604,19 @@ function ImportPageContent() {
                                 </div>
                             </div>
                             <img src={imagePreview} alt="Screenshot tiketu"
-                                style={{ width: "100%", borderRadius: 12, border: "1px solid var(--color-border)" }} />
+                                style={{ width: "100%", borderRadius: 12, border: "1px solid var(--border)" }} />
 
-                            <div style={{ marginTop: 8, textAlign: "center", color: "var(--color-text-muted)", fontSize: "0.8rem" }}>
-                                Využitý OCR profil: <strong style={{ color: "var(--color-text)" }}>{ocrBookmaker === "tipsport" ? "Tipsport" : "Betano"}</strong>
+                            <div style={{ marginTop: 8, textAlign: "center", color: "var(--text-muted)", fontSize: "0.8rem" }}>
+                                Využitý OCR profil: <strong style={{ color: "var(--text-primary)" }}>{ocrBookmaker === "tipsport" ? "Tipsport" : "Betano"}</strong>
                             </div>
 
                             {/* Raw OCR */}
                             {rawText && (
                                 <details style={{ marginTop: 12 }}>
-                                    <summary style={{ cursor: "pointer", color: "var(--color-text-secondary)", fontSize: "0.8rem" }}>
+                                    <summary style={{ cursor: "pointer", color: "var(--text-secondary)", fontSize: "0.8rem" }}>
                                         🔍 Raw OCR výstup
                                     </summary>
-                                    <pre style={{ background: "var(--color-bg-input)", padding: 12, borderRadius: 8, marginTop: 8, fontSize: "0.75rem", whiteSpace: "pre-wrap", maxHeight: 300, overflow: "auto" }}>
+                                    <pre style={{ background: "var(--bg-input)", padding: 12, borderRadius: 8, marginTop: 8, fontSize: "0.75rem", whiteSpace: "pre-wrap", maxHeight: 300, overflow: "auto" }}>
                                         {rawText}
                                     </pre>
                                 </details>
@@ -648,10 +648,10 @@ function ImportPageContent() {
                         {loading ? (
                             <div style={{ textAlign: "center", padding: "3rem" }}>
                                 <div className="spinner" style={{ width: 32, height: 32 }} />
-                                <p style={{ marginTop: 12, color: "var(--color-text-secondary)" }}>
+                                <p style={{ marginTop: 12, color: "var(--text-secondary)" }}>
                                     Rozpoznávám tiket… (může trvat 10–30 s)
                                 </p>
-                                <p style={{ marginTop: 4, color: "var(--color-text-muted)", fontSize: "0.75rem" }}>
+                                <p style={{ marginTop: 4, color: "var(--text-muted)", fontSize: "0.75rem" }}>
                                     První spuštění může trvat 1–3 minuty
                                 </p>
                                 <button
@@ -666,11 +666,11 @@ function ImportPageContent() {
                         ) : parsedTickets.length === 0 ? (
                             <div style={{ padding: "2rem", textAlign: "center" }}>
                                 {ocrError ? (
-                                    <div style={{ background: "var(--color-yellow-soft)", padding: "12px 16px", borderRadius: 10, marginBottom: 12, fontSize: "0.85rem", color: "var(--color-yellow)" }}>
+                                    <div style={{ background: "var(--warning-soft)", padding: "12px 16px", borderRadius: 10, marginBottom: 12, fontSize: "0.85rem", color: "var(--warning)" }}>
                                         ⚠️ {ocrError}
                                     </div>
                                 ) : (
-                                    <p style={{ color: "var(--color-text-muted)" }}>
+                                    <p style={{ color: "var(--text-muted)" }}>
                                         Žádné tikety. Vlož screenshot nebo klikni "Přidat ručně".
                                     </p>
                                 )}
@@ -721,38 +721,38 @@ function ImportPageContent() {
 function AkuGroup({ parentTicket, parentIndex, childIndices, parsedTickets, sports, allMarketTypes, topMarketTypes, bookmakers, ocrBookmaker, validationErrors, onUpdate, onRemove }) {
     return (
         <div style={{
-            border: "2px solid var(--color-accent)",
+            border: "2px solid var(--accent)",
             borderRadius: 14,
             padding: "1rem",
-            background: "var(--color-bg-card)",
+            background: "var(--bg-card)",
         }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
-                <span style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--color-accent)" }}>
+                <span style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--accent)" }}>
                     🎫 AKU tiket (nadřazený)
                 </span>
-                <button type="button" style={{ background: "none", border: "none", color: "var(--color-text-muted)", cursor: "pointer", fontSize: "1rem" }} onClick={() => onRemove(parentIndex)} title="Odstranit celý AKU tiket">✕</button>
+                <button type="button" style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "1rem" }} onClick={() => onRemove(parentIndex)} title="Odstranit celý AKU tiket">✕</button>
             </div>
-            <p style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", marginBottom: 12 }}>
+            <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: 12 }}>
                 Systém rozpoznal AKU – níže doplňte každý zápas (subtiket) ručně.
             </p>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8, marginBottom: 16, alignItems: "end" }}>
                 <div>
-                    <label style={{ color: "var(--color-text-muted)", fontSize: "0.7rem" }}>Vklad</label>
+                    <label style={{ color: "var(--text-muted)", fontSize: "0.7rem" }}>Vklad</label>
                     <input type="number" className="input" style={{ padding: "6px 10px", fontSize: "0.8rem" }}
                         value={parentTicket.stake || ""} onChange={(e) => onUpdate(parentIndex, "stake", e.target.value)} placeholder="50" />
                 </div>
                 <div>
-                    <label style={{ color: "var(--color-text-muted)", fontSize: "0.7rem" }}>Kurz</label>
+                    <label style={{ color: "var(--text-muted)", fontSize: "0.7rem" }}>Kurz</label>
                     <input type="number" step="0.01" className="input" style={{ padding: "6px 10px", fontSize: "0.8rem" }}
                         value={parentTicket.odds || ""} onChange={(e) => onUpdate(parentIndex, "odds", e.target.value)} placeholder="2.50" />
                 </div>
                 <div>
-                    <label style={{ color: "var(--color-text-muted)", fontSize: "0.7rem" }}>Výhra</label>
+                    <label style={{ color: "var(--text-muted)", fontSize: "0.7rem" }}>Výhra</label>
                     <input type="number" className="input" style={{ padding: "6px 10px", fontSize: "0.8rem" }}
                         value={parentTicket.payout || ""} onChange={(e) => onUpdate(parentIndex, "payout", e.target.value)} placeholder="0" />
                 </div>
                 <div>
-                    <label style={{ color: "var(--color-text-muted)", fontSize: "0.7rem" }}>Stav</label>
+                    <label style={{ color: "var(--text-muted)", fontSize: "0.7rem" }}>Stav</label>
                     <select className="input" style={{ padding: "6px 10px", fontSize: "0.8rem" }}
                         value={parentTicket.status || "open"} onChange={(e) => onUpdate(parentIndex, "status", e.target.value)}>
                         <option value="won">✅ Výhra</option>
@@ -763,15 +763,15 @@ function AkuGroup({ parentTicket, parentIndex, childIndices, parsedTickets, spor
                 </div>
             </div>
             {validationErrors[parentIndex]?.length > 0 && (
-                <div style={{ marginBottom: 12, padding: "6px 10px", background: "var(--color-red-soft)", borderRadius: 8, fontSize: "0.75rem", color: "var(--color-red)" }}>
+                <div style={{ marginBottom: 12, padding: "6px 10px", background: "var(--danger-soft)", borderRadius: 8, fontSize: "0.75rem", color: "var(--danger)" }}>
                     {validationErrors[parentIndex].join(" • ")}
                 </div>
             )}
-            <div style={{ fontSize: "0.8rem", fontWeight: 600, marginBottom: 8, color: "var(--color-text-secondary)" }}>Subtikety (doplňte ručně):</div>
+            <div style={{ fontSize: "0.8rem", fontWeight: 600, marginBottom: 8, color: "var(--text-secondary)" }}>Subtikety (doplňte ručně):</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                 {childIndices.map((ci, subIdx) => (
-                    <div key={ci} style={{ paddingLeft: 12, borderLeft: "3px solid var(--color-border)" }}>
-                        <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", marginBottom: 6 }}>Subtiket #{subIdx + 1}</div>
+                    <div key={ci} style={{ paddingLeft: 12, borderLeft: "3px solid var(--border)" }}>
+                        <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: 6 }}>Subtiket #{subIdx + 1}</div>
                         <TicketForm
                             ticket={parsedTickets[ci]}
                             index={ci}
@@ -845,8 +845,8 @@ function MarketTypeSelect({ value, allMarketTypes, onUpdate, sportId }) {
             {isOpen && (
                 <div style={{
                     position: "absolute", top: "100%", left: 0, right: 0,
-                    background: "var(--color-bg-card)",
-                    border: "1px solid var(--color-border)",
+                    background: "var(--bg-card)",
+                    border: "1px solid var(--border)",
                     borderRadius: 10, marginTop: 6, zIndex: 1000,
                     maxHeight: 280, overflowY: "auto",
                     boxShadow: "0 10px 30px -5px rgba(0, 0, 0, 0.6)",
@@ -854,7 +854,7 @@ function MarketTypeSelect({ value, allMarketTypes, onUpdate, sportId }) {
                     padding: "4px"
                 }}>
                     {!search && sportTopTypes.length > 0 && (
-                        <div style={{ padding: "8px 12px", fontSize: "0.7rem", color: "var(--color-text-secondary)", background: "rgba(255,255,255,0.02)", borderRadius: "6px 6px 0 0", marginBottom: 2 }}>
+                        <div style={{ padding: "8px 12px", fontSize: "0.7rem", color: "var(--text-secondary)", background: "var(--surface-subtle)", borderRadius: "6px 6px 0 0", marginBottom: 2 }}>
                             🔥 Časté pro tento sport (nahoře), níže celý seznam typů
                         </div>
                     )}
@@ -868,7 +868,7 @@ function MarketTypeSelect({ value, allMarketTypes, onUpdate, sportId }) {
                                 fontSize: "0.8rem",
                                 borderRadius: 6,
                                 marginBottom: 2,
-                                background: mt.name === value ? "var(--color-accent-soft)" : "transparent",
+                                background: mt.name === value ? "var(--accent-soft)" : "transparent",
                                 transition: "all 0.2s"
                             }}
                             onMouseDown={() => {
@@ -893,13 +893,13 @@ function MarketTypeSelect({ value, allMarketTypes, onUpdate, sportId }) {
                         <div
                             style={{
                                 padding: "12px", cursor: "pointer",
-                                color: "var(--color-blue)", fontWeight: 600,
+                                color: "var(--info)", fontWeight: 600,
                                 borderRadius: 8,
-                                background: "rgba(var(--color-blue-rgb), 0.1)",
+                                background: "var(--info-soft)",
                                 fontSize: "0.8rem",
                                 marginTop: 4,
                                 textAlign: "center",
-                                border: "1px dashed var(--color-blue)"
+                                border: "1px dashed var(--info)"
                             }}
                             onMouseDown={() => {
                                 onUpdate(search);
@@ -911,13 +911,13 @@ function MarketTypeSelect({ value, allMarketTypes, onUpdate, sportId }) {
                     )}
 
                     {displayList.length === 0 && search && (
-                        <div style={{ padding: "20px 12px", color: "var(--color-text-muted)", fontSize: "0.75rem", textAlign: "center" }}>
+                        <div style={{ padding: "20px 12px", color: "var(--text-muted)", fontSize: "0.75rem", textAlign: "center" }}>
                             🔍 Žádný odpovídající typ nenalezen
                         </div>
                     )}
 
                     {displayList.length === 0 && !search && (
-                        <div style={{ padding: "20px 12px", color: "var(--color-text-muted)", fontSize: "0.75rem", textAlign: "center" }}>
+                        <div style={{ padding: "20px 12px", color: "var(--text-muted)", fontSize: "0.75rem", textAlign: "center" }}>
                             Zatím žádné typy sázek
                         </div>
                     )}
@@ -938,32 +938,32 @@ function TicketForm({ ticket: t, index: i, sports, allMarketTypes, topMarketType
     const hasErrors = Array.isArray(errors) && errors.length > 0;
     return (
         <div style={{
-            background: "var(--color-bg-input)",
+            background: "var(--bg-input)",
             borderRadius: 12, padding: "1rem",
-            border: "1px solid var(--color-border)",
-            borderLeft: hasErrors ? "3px solid var(--color-red)" : undefined,
+            border: "1px solid var(--border)",
+            borderLeft: hasErrors ? "3px solid var(--danger)" : undefined,
         }}>
             {/* Header */}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+                <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
                     Tiket #{i + 1}
                     {t.ticket_type === "aku" && (
-                        <span style={{ marginLeft: 8, padding: "2px 6px", borderRadius: 6, background: "var(--color-bg-card)", color: "var(--color-text-primary)", fontSize: "0.7rem", fontWeight: 600 }}>AKU</span>
+                        <span style={{ marginLeft: 8, padding: "2px 6px", borderRadius: 6, background: "var(--bg-card)", color: "var(--text-primary)", fontSize: "0.7rem", fontWeight: 600 }}>AKU</span>
                     )}
                 </span>
                 <button
-                    style={{ background: "none", border: "none", color: "var(--color-text-muted)", cursor: "pointer", fontSize: "1rem" }}
+                    style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "1rem" }}
                     onClick={() => onRemove(i)}
                 >✕</button>
             </div>
             {t.ticket_type === "aku" && (
-                <p style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", marginBottom: 10 }}>AKU – doplňte ručně podle rozkliknutého tiketu.</p>
+                <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: 10 }}>AKU – doplňte ručně podle rozkliknutého tiketu.</p>
             )}
 
             {/* Sport, Sázkovka */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
                 <div>
-                    <label style={{ color: "var(--color-text-muted)", fontSize: "0.7rem" }}>Sport</label>
+                    <label style={{ color: "var(--text-muted)", fontSize: "0.7rem" }}>Sport</label>
                     <select className="input" style={{ padding: "6px 10px", fontSize: "0.8rem" }}
                         value={t.sport || ""} onChange={(e) => onUpdate(i, "sport", e.target.value)}>
                         <option value="">– vybrat –</option>
@@ -971,7 +971,7 @@ function TicketForm({ ticket: t, index: i, sports, allMarketTypes, topMarketType
                     </select>
                 </div>
                 <div>
-                    <label style={{ color: "var(--color-text-muted)", fontSize: "0.7rem" }}>Sázkovka</label>
+                    <label style={{ color: "var(--text-muted)", fontSize: "0.7rem" }}>Sázkovka</label>
                     <select className="input" style={{
                         padding: "6px 10px",
                         fontSize: "0.8rem",
@@ -989,14 +989,14 @@ function TicketForm({ ticket: t, index: i, sports, allMarketTypes, topMarketType
             {/* Domácí, Hosté */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 8, marginBottom: 10, alignItems: "end" }}>
                 <div>
-                    <label style={{ color: "var(--color-text-muted)", fontSize: "0.7rem" }}>Domácí</label>
+                    <label style={{ color: "var(--text-muted)", fontSize: "0.7rem" }}>Domácí</label>
                     <input className="input" style={{ padding: "8px 10px", fontSize: "0.85rem", fontWeight: 600 }}
                         placeholder="Domácí tým"
                         value={t.home_team || ""} onChange={(e) => onUpdate(i, "home_team", e.target.value)} />
                 </div>
-                <span style={{ padding: "8px 4px", color: "var(--color-text-muted)" }}>–</span>
+                <span style={{ padding: "8px 4px", color: "var(--text-muted)" }}>–</span>
                 <div>
-                    <label style={{ color: "var(--color-text-muted)", fontSize: "0.7rem" }}>Hosté</label>
+                    <label style={{ color: "var(--text-muted)", fontSize: "0.7rem" }}>Hosté</label>
                     <input className="input" style={{ padding: "8px 10px", fontSize: "0.85rem", fontWeight: 600 }}
                         placeholder="Hostující tým"
                         value={t.away_team || ""} onChange={(e) => onUpdate(i, "away_team", e.target.value)} />
@@ -1005,7 +1005,7 @@ function TicketForm({ ticket: t, index: i, sports, allMarketTypes, topMarketType
             {/* Typ sázky, Výběr, Kurz, Vklad, Výhra */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, fontSize: "0.8rem" }}>
                 <div>
-                    <label style={{ color: "var(--color-text-muted)", fontSize: "0.7rem" }}>Typ sázky</label>
+                    <label style={{ color: "var(--text-muted)", fontSize: "0.7rem" }}>Typ sázky</label>
                     <MarketTypeSelect
                         value={t.market_label}
                         allMarketTypes={allMarketTypes}
@@ -1014,25 +1014,25 @@ function TicketForm({ ticket: t, index: i, sports, allMarketTypes, topMarketType
                     />
                 </div>
                 <div>
-                    <label style={{ color: "var(--color-text-muted)", fontSize: "0.7rem" }}>Výběr</label>
+                    <label style={{ color: "var(--text-muted)", fontSize: "0.7rem" }}>Výběr</label>
                     <input className="input" style={{ padding: "6px 10px", fontSize: "0.8rem" }}
                         placeholder={t.ticket_type === "aku" ? "AKU – vyplňte ručně" : "Over / Under / 1X2..."}
                         value={t.selection || ""} onChange={(e) => onUpdate(i, "selection", e.target.value)} />
                 </div>
                 <div>
-                    <label style={{ color: "var(--color-text-muted)", fontSize: "0.7rem" }}>Kurz</label>
+                    <label style={{ color: "var(--text-muted)", fontSize: "0.7rem" }}>Kurz</label>
                     <input className="input" type="number" step="0.01" style={{ padding: "6px 10px", fontSize: "0.8rem" }}
                         placeholder="2.22"
                         value={t.odds || ""} onChange={(e) => onUpdate(i, "odds", e.target.value)} />
                 </div>
                 <div>
-                    <label style={{ color: "var(--color-text-muted)", fontSize: "0.7rem" }}>Vklad</label>
+                    <label style={{ color: "var(--text-muted)", fontSize: "0.7rem" }}>Vklad</label>
                     <input className="input" type="number" style={{ padding: "6px 10px", fontSize: "0.8rem" }}
                         placeholder="50"
                         value={t.stake || ""} onChange={(e) => onUpdate(i, "stake", e.target.value)} />
                 </div>
                 <div>
-                    <label style={{ color: "var(--color-text-muted)", fontSize: "0.7rem" }}>Výhra</label>
+                    <label style={{ color: "var(--text-muted)", fontSize: "0.7rem" }}>Výhra</label>
                     <input className="input" type="number" style={{ padding: "6px 10px", fontSize: "0.8rem" }}
                         placeholder="111"
                         value={t.payout || ""} onChange={(e) => onUpdate(i, "payout", e.target.value)} />
@@ -1042,7 +1042,7 @@ function TicketForm({ ticket: t, index: i, sports, allMarketTypes, topMarketType
             {/* Stav */}
             <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center" }}>
                 <div>
-                    <label style={{ color: "var(--color-text-muted)", fontSize: "0.7rem", display: "block", marginBottom: 4 }}>Stav</label>
+                    <label style={{ color: "var(--text-muted)", fontSize: "0.7rem", display: "block", marginBottom: 4 }}>Stav</label>
                     <select className="input" style={{ width: 130, padding: "6px 10px", fontSize: "0.8rem" }}
                         value={t.status || "open"} onChange={(e) => onUpdate(i, "status", e.target.value)}>
                     <option value="won">✅ Výhra</option>
@@ -1053,7 +1053,7 @@ function TicketForm({ ticket: t, index: i, sports, allMarketTypes, topMarketType
                 </div>
             </div>
             {hasErrors && (
-                <div style={{ marginTop: 8, padding: "6px 10px", background: "var(--color-red-soft)", borderRadius: 8, fontSize: "0.75rem", color: "var(--color-red)" }}>
+                <div style={{ marginTop: 8, padding: "6px 10px", background: "var(--danger-soft)", borderRadius: 8, fontSize: "0.75rem", color: "var(--danger)" }}>
                     {errors.join(" • ")}
                 </div>
             )}
@@ -1063,7 +1063,7 @@ function TicketForm({ ticket: t, index: i, sports, allMarketTypes, topMarketType
 
 export default function ImportPage() {
     return (
-        <Suspense fallback={<div style={{ padding: 24, textAlign: "center", color: "var(--color-text-muted)" }}>Načítání…</div>}>
+        <Suspense fallback={<div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Načítání…</div>}>
             <ImportPageContent />
         </Suspense>
     );

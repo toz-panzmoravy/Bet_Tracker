@@ -39,7 +39,7 @@ start.bat
 The `start.bat` script handles everything automatically:
 - Starts PostgreSQL via Docker
 - Runs database migrations & seeds
-- Launches backend (port 8000) and frontend (port 3000)
+- Launches backend (port 15555) and frontend (port 3001)
 
 ## Manual Start
 
@@ -55,7 +55,7 @@ cd ../backend
 .\venv\Scripts\activate
 alembic upgrade head
 python -m app.seed
-uvicorn app.main:app --reload --port 8000
+uvicorn app.main:app --reload --port 15555
 
 # 3. Start frontend (new terminal)
 cd frontend
@@ -77,9 +77,9 @@ OLLAMA_TEXT_MODEL=qwen2.5:14b-instruct
 
 | Service | URL |
 |---------|-----|
-| Frontend | http://localhost:3000 |
-| Backend API | http://localhost:8000 |
-| API Docs (Swagger) | http://localhost:8000/docs |
+| Frontend | http://localhost:3001 |
+| Backend API | http://localhost:15555 |
+| API Docs (Swagger) | http://localhost:15555/docs |
 
 ## Tech Stack
 
